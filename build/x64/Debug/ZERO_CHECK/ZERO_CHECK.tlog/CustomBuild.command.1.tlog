@@ -1,0 +1,10 @@
+^C:\USERS\MCMCO\SCRN\BUILD\CMAKEFILES\E0D04F83E9BF8DC7D4B9B0352759EBD9\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/Users/mcmco/scrn -BC:/Users/mcmco/scrn/build --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file C:/Users/mcmco/scrn/build/AsciiScreen.sln
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

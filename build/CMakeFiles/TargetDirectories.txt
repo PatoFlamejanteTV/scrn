@@ -1,0 +1,3 @@
+C:/Users/mcmco/scrn/build/CMakeFiles/AsciiScreen.dir
+C:/Users/mcmco/scrn/build/CMakeFiles/ALL_BUILD.dir
+C:/Users/mcmco/scrn/build/CMakeFiles/ZERO_CHECK.dir
