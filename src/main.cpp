@@ -16,8 +16,8 @@
 
 // Desired console dimensions for the ASCII art.
 // Adjust these to match your terminal's size for best results.
-const int CONSOLE_WIDTH = 360; // Doubled for higher resolution
-const int CONSOLE_HEIGHT = 240;  // Doubled for higher resolution
+const int CONSOLE_WIDTH = 240; // Doubled for higher resolution
+const int CONSOLE_HEIGHT = 80;  // Doubled for higher resolution
 
 // Characters from darkest to brightest. A longer ramp gives more detail.
 const std::string ASCII_RAMP = " .'`^\",:;Il!i><~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$";
@@ -114,7 +114,7 @@ bool captureScreenGDI(std::vector<unsigned char>& buffer, int& width, int& heigh
 
 int main() {
     const auto frame_duration = std::chrono::milliseconds(1000 / TARGET_FPS);
-    std::cout << "Starting screen capture... Press Ctrl+C to exit." << std::endl;
+    std::cout << "Starting screen capture using GDI... Press Ctrl+C to exit." << std::endl;
     std::this_thread::sleep_for(std::chrono::seconds(2));
 
     std::vector<unsigned char> frame_buffer;
