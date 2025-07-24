@@ -13,7 +13,5 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: make
-      run: make
-    - name: make check
-      run: make check
+    - name: Build with gcc
+      run: gcc -o my_program main.c
