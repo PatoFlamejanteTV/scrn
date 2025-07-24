@@ -14,4 +14,4 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Build with gcc
-      run: gcc -o scrn.exe src/main.cpp
+      run: g++ src/main.cpp -o scrn.exe
