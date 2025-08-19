@@ -217,6 +217,7 @@ int main(int argc, char* argv[]) {
 #endif
     bool show_help = false;
     std::string error;
+    std::string mode = "normal";
     std::string ramp_or_mode = get_ascii_ramp_from_args(argc, argv, show_help, error);
     if (show_help) {
         if (!error.empty()) {
@@ -224,6 +225,24 @@ int main(int argc, char* argv[]) {
         }
         print_help();
         return error.empty() ? 0 : 1;
+    }
+    // If ramp_or_mode is not a valid ramp, get_ascii_ramp_from_args returns the mode string (for error reporting)
+    // So, we need to extract the mode string from the arguments for later use
+    // We'll parse it again here for simplicity
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if ((arg == "--mode" || arg == "-m") && i + 1 < argc) {
+            mode = argv[i + 1];
+            break;
+        }
+        if (arg.rfind("--mode=", 0) == 0) {
+            mode = arg.substr(7);
+            break;
+        }
+        if (arg.rfind("-m=", 0) == 0) {
+            mode = arg.substr(3);
+            break;
+        }
     }
     const std::string& ASCII_RAMP = ramp_or_mode;
     const auto frame_duration = std::chrono::milliseconds(1000 / TARGET_FPS);
