@@ -1,3 +1,20 @@
+#ifdef _WIN32
+#include <windows.h>
+#endif
+// Helper to restore console code page on exit (RAII)
+#ifdef _WIN32
+class ConsoleCodePageGuard {
+    UINT old_cp;
+public:
+    ConsoleCodePageGuard(UINT new_cp) {
+        old_cp = GetConsoleOutputCP();
+        SetConsoleOutputCP(new_cp);
+    }
+    ~ConsoleCodePageGuard() {
+        SetConsoleOutputCP(old_cp);
+    }
+};
+#endif
 #include <locale>
 // Returns true if the ramp contains any non-ASCII (Unicode) characters
 bool ramp_has_unicode(const std::string& ramp) {
@@ -192,6 +209,9 @@ bool captureScreenGDI(std::vector<unsigned char>& buffer, int& width, int& heigh
 
 int main(int argc, char* argv[]) {
 #ifdef _WIN32
+    ConsoleCodePageGuard* cp_guard = nullptr;
+#endif
+#ifdef _WIN32
     // Set Windows console to UTF-8 for Unicode output
     SetConsoleOutputCP(CP_UTF8);
 #endif
@@ -210,13 +230,27 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Starting screen capture using GDI... Press Ctrl+C to exit.\n";
     std::cout << "Current mode: " << ASCII_RAMP << std::endl;
+    // Set code page for Windows console depending on mode
+#ifdef _WIN32
+    if (mode == "codepage437") {
+        cp_guard = new ConsoleCodePageGuard(437);
+        std::cout << "\n[Info] Using code page 437 (OEM US) for this mode.\n";
+        std::cout << "[Tip] For best results, use a raster font or 'Terminal' font in your console.\n";
+    } else if (ramp_has_unicode(ASCII_RAMP)) {
+        cp_guard = new ConsoleCodePageGuard(65001);
+        std::cout << "\n[Info] This mode uses Unicode characters.\n";
+        std::cout << "[Tip] For best results, use a Unicode font (like 'Consolas' or 'Cascadia Mono') in your terminal.\n";
+    }
+#else
     if (ramp_has_unicode(ASCII_RAMP)) {
         std::cout << "\n[Info] This mode uses Unicode characters.\n";
-#ifdef _WIN32
-        std::cout << "[Tip] For best results, use a Unicode font (like 'Consolas' or 'Cascadia Mono') in your terminal.\n";
-#endif
     }
+#endif
     std::this_thread::sleep_for(std::chrono::seconds(2));
+
+#ifdef _WIN32
+    if (cp_guard) delete cp_guard;
+#endif
 
     std::vector<unsigned char> frame_buffer;
     int src_width = 0;
