@@ -1,3 +1,11 @@
+#include <locale>
+// Returns true if the ramp contains any non-ASCII (Unicode) characters
+bool ramp_has_unicode(const std::string& ramp) {
+    for (unsigned char c : ramp) {
+        if (c > 127) return true;
+    }
+    return false;
+}
 #include <iostream>
 #include <vector>
 #include <string>
@@ -19,8 +27,78 @@
 const int CONSOLE_WIDTH = 240; // Doubled for higher resolution
 const int CONSOLE_HEIGHT = 80;  // Doubled for higher resolution
 
-// Characters from darkest to brightest. A longer ramp gives more detail.
-const std::string ASCII_RAMP = " .'`^\",:;Il!i><~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$";
+
+#include <unordered_map>
+
+// Map of modes to their ASCII ramps
+const std::unordered_map<std::string, std::string> ASCII_RAMPS = {
+    {"minimalist", "#+-."},
+    {"normal", "@%#*+=-:."},
+    {"normal2", "&$Xx+;:."},
+    {"alphabetic", "ABCDEFGHIJKLMNOPQRSTUVWXYZ"},
+    {"alphanumeric", "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890abcdefghijklmnopqrstuvwxyz"},
+    {"numerical", "0896452317"},
+    {"extended", "@%#{}[]()<>^*+=~-:."},
+    {"math", "+-\xd7\xf7=≠≈∞√π"},
+    {"arrow", "↑↗→↘↓↙←↖"},
+    {"grayscale", "@$BWM#*oahkbdpwmZO0QCJYXzcvnxrjft/|()1{}[]-_+~<>i!lI;:,\"^`'."},
+    //{"max", "\xc6\xd1\xcaŒ\xd8M\xc9\xcb\xc8\xc3\xc2WQB\xc5\xe6#N\xc1\xfeE\xc4\xc0HKRŽœXg\xd0\xeaq\xdbŠ\xd5\xd4A€\xdfpm\xe3\xe2G\xb6\xf8\xf0\xe98\xda\xdc$\xebd\xd9\xfd\xe8\xd3\xde\xd6\xe5\xff\xd2b\xa5FD\xf1\xe1ZP\xe4š\xc7\xe0h\xfb\xa7\xddkŸ\xaeS9žUTe6\xb5Oyx\xce\xbef4\xf55\xf4\xfa&a\xfc™2\xf9\xe7w\xa9Y\xa30V\xcdL\xb13\xcf\xcc\xf3C@n\xf6\xf2s\xa2u‰\xbd\xbc‡zJƒ%\xa4Itoc\xeerjv1l\xed=\xef\xec<>i7†[\xbf?\xd7}*{+()/\xbb\xab•\xac|!\xa1\xf7\xa6\xaf—^\xaa„”“~\xb3\xba\xb2–\xb0\xad\xb9‹›;:’‘‚’˜ˆ\xb8…\xb7\xa8\xb4`"},
+    {"codepage437", "█▓▒░"},
+    {"blockelement", "█"}
+};
+
+
+void print_help() {
+    std::cout << "Usage: AsciiScreen.exe [--mode <mode>] [--help]\n";
+    std::cout << "Available modes:\n";
+    for (const auto& kv : ASCII_RAMPS) {
+        std::cout << "  " << kv.first << std::endl;
+    }
+}
+
+std::string get_ascii_ramp_from_args(int argc, char* argv[], bool& show_help, std::string& error) {
+    std::string mode = "normal"; // default mode
+    show_help = false;
+    error.clear();
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg == "--help" || arg == "-h") {
+            show_help = true;
+            return "";
+        }
+        if ((arg == "--mode" || arg == "-m")) {
+            if (i + 1 < argc) {
+                mode = argv[++i];
+            } else {
+                error = "Missing value for --mode/-m.";
+                show_help = true;
+            }
+            break;
+        }
+        if (arg.rfind("--mode=", 0) == 0) {
+            mode = arg.substr(7);
+            break;
+        }
+        if (arg.rfind("-m=", 0) == 0) {
+            mode = arg.substr(3);
+            break;
+        }
+        if (arg.rfind("-", 0) == 0) {
+            error = "Unknown option: " + arg;
+            show_help = true;
+            break;
+        }
+    }
+    if (show_help) return "";
+    auto it = ASCII_RAMPS.find(mode);
+    if (it != ASCII_RAMPS.end()) {
+        return it->second;
+    }
+    // fallback: invalid mode, trigger help
+    error = "Unknown mode: '" + mode + "'";
+    show_help = true;
+    return mode;
+}
 
 // Desired frames per second.
 const int TARGET_FPS = 60;
@@ -112,9 +190,32 @@ bool captureScreenGDI(std::vector<unsigned char>& buffer, int& width, int& heigh
     return true;
 }
 
-int main() {
+int main(int argc, char* argv[]) {
+#ifdef _WIN32
+    // Set Windows console to UTF-8 for Unicode output
+    SetConsoleOutputCP(CP_UTF8);
+#endif
+    bool show_help = false;
+    std::string error;
+    std::string ramp_or_mode = get_ascii_ramp_from_args(argc, argv, show_help, error);
+    if (show_help) {
+        if (!error.empty()) {
+            std::cerr << error << std::endl;
+        }
+        print_help();
+        return error.empty() ? 0 : 1;
+    }
+    const std::string& ASCII_RAMP = ramp_or_mode;
     const auto frame_duration = std::chrono::milliseconds(1000 / TARGET_FPS);
-    std::cout << "Starting screen capture using GDI... Press Ctrl+C to exit." << std::endl;
+
+    std::cout << "Starting screen capture using GDI... Press Ctrl+C to exit.\n";
+    std::cout << "Current mode: " << ASCII_RAMP << std::endl;
+    if (ramp_has_unicode(ASCII_RAMP)) {
+        std::cout << "\n[Info] This mode uses Unicode characters.\n";
+#ifdef _WIN32
+        std::cout << "[Tip] For best results, use a Unicode font (like 'Consolas' or 'Cascadia Mono') in your terminal.\n";
+#endif
+    }
     std::this_thread::sleep_for(std::chrono::seconds(2));
 
     std::vector<unsigned char> frame_buffer;

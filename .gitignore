@@ -19,6 +19,9 @@ CMakeUserPresets.json
 *.so
 *.a
 *.lib
+*.tlog
+*.pdb
+*.ilk
 outDebug
 
 # Ignore object files
