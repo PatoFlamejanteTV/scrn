@@ -45,10 +45,11 @@ const int CONSOLE_WIDTH = 240; // Doubled for higher resolution
 const int CONSOLE_HEIGHT = 80;  // Doubled for higher resolution
 
 
-#include <unordered_map>
+#include <map>
+#include <iomanip>
 
 // Map of modes to their ASCII ramps
-const std::unordered_map<std::string, std::string> ASCII_RAMPS = {
+const std::map<std::string, std::string> ASCII_RAMPS = {
     {"minimalist", "#+-."},
     {"normal", "@%#*+=-:."},
     {"normal2", "&$Xx+;:."},
@@ -67,9 +68,19 @@ const std::unordered_map<std::string, std::string> ASCII_RAMPS = {
 
 void print_help() {
     std::cout << "Usage: AsciiScreen.exe [--mode <mode>] [--help]\n";
+    std::cout << "Captures the screen and renders it as ASCII art.\n\n";
     std::cout << "Available modes:\n";
+
+    // Find longest key for padding
+    size_t max_len = 0;
     for (const auto& kv : ASCII_RAMPS) {
-        std::cout << "  " << kv.first << std::endl;
+        if (kv.first.length() > max_len) max_len = kv.first.length();
+    }
+    size_t pad_width = max_len + 4;
+
+    for (const auto& kv : ASCII_RAMPS) {
+        std::cout << "  " << std::left << std::setw(pad_width) << kv.first
+                  << kv.second << std::endl;
     }
 }
 
