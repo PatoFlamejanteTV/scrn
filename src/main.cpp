@@ -307,7 +307,14 @@ int main(int argc, char* argv[]) {
                         const unsigned char b = src_data[pixel_offset];
                         const unsigned char g = src_data[pixel_offset + 1];
                         const unsigned char r = src_data[pixel_offset + 2];
-                        total_gray += static_cast<unsigned char>(0.2126 * r + 0.7152 * g + 0.0722 * b);
+
+                        // Integer approximation of 0.2126*r + 0.7152*g + 0.0722*b using 16-bit fixed point
+                        // 0.2126 * 65536 ~= 13933
+                        // 0.7152 * 65536 ~= 46871
+                        // 0.0722 * 65536 ~= 4732
+                        total_gray += (static_cast<unsigned int>(r) * 13933 +
+                                       static_cast<unsigned int>(g) * 46871 +
+                                       static_cast<unsigned int>(b) * 4732) >> 16;
                         pixel_count++;
                     }
                 }
