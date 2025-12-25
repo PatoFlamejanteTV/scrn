@@ -176,6 +176,12 @@ bool captureScreenGDI(std::vector<unsigned char>& buffer, int& width, int& heigh
     width = GetSystemMetrics(SM_CXSCREEN);
     height = GetSystemMetrics(SM_CYSCREEN);
 
+    if (width <= 0 || height <= 0) {
+        DeleteDC(hMemoryDC);
+        ReleaseDC(NULL, hScreenDC);
+        return false;
+    }
+
     // Create a compatible bitmap to hold the screen capture.
     HBITMAP hBitmap = CreateCompatibleBitmap(hScreenDC, width, height);
     if (!hBitmap) {
@@ -204,7 +210,9 @@ bool captureScreenGDI(std::vector<unsigned char>& buffer, int& width, int& heigh
     bi.biClrUsed = 0;
     bi.biClrImportant = 0;
 
-    buffer.resize(width * height * 4);
+    // Use size_t for calculation to prevent integer overflow
+    size_t required_size = static_cast<size_t>(width) * height * 4;
+    buffer.resize(required_size);
 
     // Extract the pixel data from the bitmap.
     GetDIBits(hScreenDC, hBitmap, 0, (UINT)height, buffer.data(), (BITMAPINFO*)&bi, DIB_RGB_COLORS);
@@ -220,7 +228,7 @@ bool captureScreenGDI(std::vector<unsigned char>& buffer, int& width, int& heigh
 
 int main(int argc, char* argv[]) {
 #ifdef _WIN32
-    ConsoleCodePageGuard* cp_guard = nullptr;
+    std::unique_ptr<ConsoleCodePageGuard> cp_guard;
 #endif
 #ifdef _WIN32
     // Set Windows console to UTF-8 for Unicode output
@@ -263,11 +271,11 @@ int main(int argc, char* argv[]) {
     // Set code page for Windows console depending on mode
 #ifdef _WIN32
     if (mode == "codepage437") {
-        cp_guard = new ConsoleCodePageGuard(437);
+        cp_guard = std::make_unique<ConsoleCodePageGuard>(437);
         std::cout << "\n[Info] Using code page 437 (OEM US) for this mode.\n";
         std::cout << "[Tip] For best results, use a raster font or 'Terminal' font in your console.\n";
     } else if (ramp_has_unicode(ASCII_RAMP)) {
-        cp_guard = new ConsoleCodePageGuard(65001);
+        cp_guard = std::make_unique<ConsoleCodePageGuard>(65001);
         std::cout << "\n[Info] This mode uses Unicode characters.\n";
         std::cout << "[Tip] For best results, use a Unicode font (like 'Consolas' or 'Cascadia Mono') in your terminal.\n";
     }
@@ -277,10 +285,6 @@ int main(int argc, char* argv[]) {
     }
 #endif
     std::this_thread::sleep_for(std::chrono::seconds(2));
-
-#ifdef _WIN32
-    if (cp_guard) delete cp_guard;
-#endif
 
     std::vector<unsigned char> frame_buffer;
     int src_width = 0;
@@ -314,7 +318,8 @@ int main(int argc, char* argv[]) {
 
                 for (int sy = start_sy; sy < end_sy; ++sy) {
                     for (int sx = start_sx; sx < end_sx; ++sx) {
-                        const auto pixel_offset = (sy * src_width + sx) * 4;
+                        // Use size_t to prevent overflow if image dimensions are large
+                        const auto pixel_offset = (static_cast<size_t>(sy) * src_width + sx) * 4;
                         const unsigned char b = src_data[pixel_offset];
                         const unsigned char g = src_data[pixel_offset + 1];
                         const unsigned char r = src_data[pixel_offset + 2];
