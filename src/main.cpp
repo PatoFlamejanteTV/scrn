@@ -284,7 +284,11 @@ int main(int argc, char* argv[]) {
         std::cout << "\n[Info] This mode uses Unicode characters.\n";
     }
 #endif
-    std::this_thread::sleep_for(std::chrono::seconds(2));
+    for (int i = 3; i > 0; --i) {
+        std::cout << "\rStarting in " << i << "... " << std::flush;
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+    std::cout << "\rStarting...       " << std::endl;
 
     std::vector<unsigned char> frame_buffer;
     int src_width = 0;
