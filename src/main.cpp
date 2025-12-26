@@ -161,66 +161,75 @@ void reset_cursor() {
  * @return True on success, false on failure.
  */
 bool captureScreenGDI(std::vector<unsigned char>& buffer, int& width, int& height) {
+    // Optimization: Cache GDI objects (Memory DC and Bitmap) to avoid re-allocation overhead every frame.
+    // We do NOT cache hScreenDC as it is a Common DC and should be released after use.
+    static HDC hMemoryDC = NULL;
+    static HBITMAP hBitmap = NULL;
+    static int cachedWidth = 0;
+    static int cachedHeight = 0;
+
     // Get the device context for the entire screen.
-    // GetDC(NULL) is the GDI equivalent of C#'s IntPtr.Zero for the screen.
     HDC hScreenDC = GetDC(NULL);
     if (!hScreenDC) return false;
 
-    // Create a memory device context compatible with the screen DC.
-    HDC hMemoryDC = CreateCompatibleDC(hScreenDC);
+    // Initialize Memory DC once
     if (!hMemoryDC) {
-        ReleaseDC(NULL, hScreenDC);
-        return false;
+        hMemoryDC = CreateCompatibleDC(hScreenDC);
+        if (!hMemoryDC) {
+            ReleaseDC(NULL, hScreenDC);
+            return false;
+        }
     }
 
     width = GetSystemMetrics(SM_CXSCREEN);
     height = GetSystemMetrics(SM_CYSCREEN);
 
     if (width <= 0 || height <= 0) {
-        DeleteDC(hMemoryDC);
         ReleaseDC(NULL, hScreenDC);
         return false;
     }
 
-    // Create a compatible bitmap to hold the screen capture.
-    HBITMAP hBitmap = CreateCompatibleBitmap(hScreenDC, width, height);
-    if (!hBitmap) {
-        DeleteDC(hMemoryDC);
-        ReleaseDC(NULL, hScreenDC);
-        return false;
-    }
+    // Recreate bitmap if resolution changes or on first run
+    if (width != cachedWidth || height != cachedHeight) {
+        HBITMAP hNewBitmap = CreateCompatibleBitmap(hScreenDC, width, height);
+        if (!hNewBitmap) {
+            ReleaseDC(NULL, hScreenDC);
+            return false;
+        }
 
-    // Select the bitmap into the memory DC.
-    HBITMAP hOldBitmap = (HBITMAP)SelectObject(hMemoryDC, hBitmap);
+        SelectObject(hMemoryDC, hNewBitmap);
+        if (hBitmap) DeleteObject(hBitmap);
+        hBitmap = hNewBitmap;
+
+        cachedWidth = width;
+        cachedHeight = height;
+    }
 
     // Perform the bit-block transfer from the screen to the memory DC.
-    BitBlt(hMemoryDC, 0, 0, width, height, hScreenDC, 0, 0, SRCCOPY);
+    if (!BitBlt(hMemoryDC, 0, 0, width, height, hScreenDC, 0, 0, SRCCOPY)) {
+        ReleaseDC(NULL, hScreenDC);
+        return false;
+    }
 
     // Setup the bitmap info structure to get the pixel data.
-    BITMAPINFOHEADER bi;
+    BITMAPINFOHEADER bi = {};
     bi.biSize = sizeof(BITMAPINFOHEADER);
     bi.biWidth = width;
     bi.biHeight = -height; // A negative height indicates a top-down DIB.
     bi.biPlanes = 1;
     bi.biBitCount = 32; // We want 32-bit BGRA format.
     bi.biCompression = BI_RGB;
-    bi.biSizeImage = 0;
-    bi.biXPelsPerMeter = 0;
-    bi.biYPelsPerMeter = 0;
-    bi.biClrUsed = 0;
-    bi.biClrImportant = 0;
 
     // Use size_t for calculation to prevent integer overflow
     size_t required_size = static_cast<size_t>(width) * height * 4;
-    buffer.resize(required_size);
+    if (buffer.size() != required_size) {
+        buffer.resize(required_size);
+    }
 
     // Extract the pixel data from the bitmap.
     GetDIBits(hScreenDC, hBitmap, 0, (UINT)height, buffer.data(), (BITMAPINFO*)&bi, DIB_RGB_COLORS);
 
-    // --- Cleanup GDI resources ---
-    SelectObject(hMemoryDC, hOldBitmap);
-    DeleteObject(hBitmap);
-    DeleteDC(hMemoryDC);
+    // Release the screen DC as we are done with it for this frame
     ReleaseDC(NULL, hScreenDC);
 
     return true;
