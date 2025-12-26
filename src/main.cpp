@@ -161,6 +161,19 @@ void reset_cursor() {
  * @return True on success, false on failure.
  */
 bool captureScreenGDI(std::vector<unsigned char>& buffer, int& width, int& height) {
+    width = GetSystemMetrics(SM_CXSCREEN);
+    height = GetSystemMetrics(SM_CYSCREEN);
+
+    if (width <= 0 || height <= 0) {
+        return false;
+    }
+
+    // Use size_t for calculation to prevent integer overflow
+    size_t required_size = static_cast<size_t>(width) * height * 4;
+
+    // Resize buffer before acquiring GDI resources.
+    // If this throws std::bad_alloc, we haven't leaked any GDI handles.
+    buffer.resize(required_size);
     // Optimization: Cache GDI objects (Memory DC and Bitmap) to avoid re-allocation overhead every frame.
     // We do NOT cache hScreenDC as it is a Common DC and should be released after use.
     static HDC hMemoryDC = NULL;
@@ -181,6 +194,13 @@ bool captureScreenGDI(std::vector<unsigned char>& buffer, int& width, int& heigh
         }
     }
 
+    // Create a compatible bitmap to hold the screen capture.
+    HBITMAP hBitmap = CreateCompatibleBitmap(hScreenDC, width, height);
+    if (!hBitmap) {
+        DeleteDC(hMemoryDC);
+        ReleaseDC(NULL, hScreenDC);
+        return false;
+    }
     width = GetSystemMetrics(SM_CXSCREEN);
     height = GetSystemMetrics(SM_CYSCREEN);
 
@@ -227,7 +247,13 @@ bool captureScreenGDI(std::vector<unsigned char>& buffer, int& width, int& heigh
     }
 
     // Extract the pixel data from the bitmap.
-    GetDIBits(hScreenDC, hBitmap, 0, (UINT)height, buffer.data(), (BITMAPINFO*)&bi, DIB_RGB_COLORS);
+    if (GetDIBits(hScreenDC, hBitmap, 0, (UINT)height, buffer.data(), (BITMAPINFO*)&bi, DIB_RGB_COLORS) == 0) {
+        SelectObject(hMemoryDC, hOldBitmap);
+        DeleteObject(hBitmap);
+        DeleteDC(hMemoryDC);
+        ReleaseDC(NULL, hScreenDC);
+        return false;
+    }
 
     // Release the screen DC as we are done with it for this frame
     ReleaseDC(NULL, hScreenDC);
