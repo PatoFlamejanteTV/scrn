@@ -161,6 +161,20 @@ void reset_cursor() {
  * @return True on success, false on failure.
  */
 bool captureScreenGDI(std::vector<unsigned char>& buffer, int& width, int& height) {
+    width = GetSystemMetrics(SM_CXSCREEN);
+    height = GetSystemMetrics(SM_CYSCREEN);
+
+    if (width <= 0 || height <= 0) {
+        return false;
+    }
+
+    // Use size_t for calculation to prevent integer overflow
+    size_t required_size = static_cast<size_t>(width) * height * 4;
+
+    // Resize buffer before acquiring GDI resources.
+    // If this throws std::bad_alloc, we haven't leaked any GDI handles.
+    buffer.resize(required_size);
+
     // Get the device context for the entire screen.
     // GetDC(NULL) is the GDI equivalent of C#'s IntPtr.Zero for the screen.
     HDC hScreenDC = GetDC(NULL);
@@ -169,15 +183,6 @@ bool captureScreenGDI(std::vector<unsigned char>& buffer, int& width, int& heigh
     // Create a memory device context compatible with the screen DC.
     HDC hMemoryDC = CreateCompatibleDC(hScreenDC);
     if (!hMemoryDC) {
-        ReleaseDC(NULL, hScreenDC);
-        return false;
-    }
-
-    width = GetSystemMetrics(SM_CXSCREEN);
-    height = GetSystemMetrics(SM_CYSCREEN);
-
-    if (width <= 0 || height <= 0) {
-        DeleteDC(hMemoryDC);
         ReleaseDC(NULL, hScreenDC);
         return false;
     }
@@ -210,12 +215,14 @@ bool captureScreenGDI(std::vector<unsigned char>& buffer, int& width, int& heigh
     bi.biClrUsed = 0;
     bi.biClrImportant = 0;
 
-    // Use size_t for calculation to prevent integer overflow
-    size_t required_size = static_cast<size_t>(width) * height * 4;
-    buffer.resize(required_size);
-
     // Extract the pixel data from the bitmap.
-    GetDIBits(hScreenDC, hBitmap, 0, (UINT)height, buffer.data(), (BITMAPINFO*)&bi, DIB_RGB_COLORS);
+    if (GetDIBits(hScreenDC, hBitmap, 0, (UINT)height, buffer.data(), (BITMAPINFO*)&bi, DIB_RGB_COLORS) == 0) {
+        SelectObject(hMemoryDC, hOldBitmap);
+        DeleteObject(hBitmap);
+        DeleteDC(hMemoryDC);
+        ReleaseDC(NULL, hScreenDC);
+        return false;
+    }
 
     // --- Cleanup GDI resources ---
     SelectObject(hMemoryDC, hOldBitmap);
