@@ -179,19 +179,29 @@ bool captureScreenGDI(std::vector<unsigned char>& buffer, int& width, int& heigh
             ReleaseDC(NULL, hScreenDC);
             return false;
         }
+        // Set up scaling mode for high quality downsampling
+        SetBrushOrgEx(hMemoryDC, 0, 0, NULL);
+        SetStretchBltMode(hMemoryDC, HALFTONE);
     }
 
-    width = GetSystemMetrics(SM_CXSCREEN);
-    height = GetSystemMetrics(SM_CYSCREEN);
+    int screen_width = GetSystemMetrics(SM_CXSCREEN);
+    int screen_height = GetSystemMetrics(SM_CYSCREEN);
 
-    if (width <= 0 || height <= 0) {
+    // Performance optimization:
+    // Instead of capturing the full screen and downsampling in CPU (slow),
+    // we use GDI to stretch-blit the screen to the target console size (fast).
+    // This reduces data transfer from ~8MB (1080p) to ~76KB, significantly improving FPS.
+    int target_width = CONSOLE_WIDTH;
+    int target_height = CONSOLE_HEIGHT;
+
+    if (screen_width <= 0 || screen_height <= 0) {
         ReleaseDC(NULL, hScreenDC);
         return false;
     }
 
-    // Recreate bitmap if resolution changes or on first run
-    if (width != cachedWidth || height != cachedHeight) {
-        HBITMAP hNewBitmap = CreateCompatibleBitmap(hScreenDC, width, height);
+    // Recreate bitmap if target size changes
+    if (target_width != cachedWidth || target_height != cachedHeight) {
+        HBITMAP hNewBitmap = CreateCompatibleBitmap(hScreenDC, target_width, target_height);
         if (!hNewBitmap) {
             ReleaseDC(NULL, hScreenDC);
             return false;
@@ -201,12 +211,13 @@ bool captureScreenGDI(std::vector<unsigned char>& buffer, int& width, int& heigh
         if (hBitmap) DeleteObject(hBitmap);
         hBitmap = hNewBitmap;
 
-        cachedWidth = width;
-        cachedHeight = height;
+        cachedWidth = target_width;
+        cachedHeight = target_height;
     }
 
-    // Perform the bit-block transfer from the screen to the memory DC.
-    if (!BitBlt(hMemoryDC, 0, 0, width, height, hScreenDC, 0, 0, SRCCOPY)) {
+    // Perform the stretch blit transfer from the screen to the memory DC.
+    // GDI handles the downsampling here.
+    if (!StretchBlt(hMemoryDC, 0, 0, target_width, target_height, hScreenDC, 0, 0, screen_width, screen_height, SRCCOPY)) {
         ReleaseDC(NULL, hScreenDC);
         return false;
     }
@@ -214,23 +225,27 @@ bool captureScreenGDI(std::vector<unsigned char>& buffer, int& width, int& heigh
     // Setup the bitmap info structure to get the pixel data.
     BITMAPINFOHEADER bi = {};
     bi.biSize = sizeof(BITMAPINFOHEADER);
-    bi.biWidth = width;
-    bi.biHeight = -height; // A negative height indicates a top-down DIB.
+    bi.biWidth = target_width;
+    bi.biHeight = -target_height; // A negative height indicates a top-down DIB.
     bi.biPlanes = 1;
     bi.biBitCount = 32; // We want 32-bit BGRA format.
     bi.biCompression = BI_RGB;
 
     // Use size_t for calculation to prevent integer overflow
-    size_t required_size = static_cast<size_t>(width) * height * 4;
+    size_t required_size = static_cast<size_t>(target_width) * target_height * 4;
     if (buffer.size() != required_size) {
         buffer.resize(required_size);
     }
 
     // Extract the pixel data from the bitmap.
-    GetDIBits(hScreenDC, hBitmap, 0, (UINT)height, buffer.data(), (BITMAPINFO*)&bi, DIB_RGB_COLORS);
+    GetDIBits(hScreenDC, hBitmap, 0, (UINT)target_height, buffer.data(), (BITMAPINFO*)&bi, DIB_RGB_COLORS);
 
     // Release the screen DC as we are done with it for this frame
     ReleaseDC(NULL, hScreenDC);
+
+    // Update output params
+    width = target_width;
+    height = target_height;
 
     return true;
 }
