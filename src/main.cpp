@@ -276,7 +276,7 @@ int main(int argc, char* argv[]) {
     const auto frame_duration = std::chrono::milliseconds(1000 / TARGET_FPS);
 
     std::cout << "Starting screen capture using GDI... Press Ctrl+C to exit.\n";
-    std::cout << "Current mode: " << ASCII_RAMP << std::endl;
+    std::cout << "Current mode: '" << mode << "' (" << ASCII_RAMP << ")" << std::endl;
     // Set code page for Windows console depending on mode
 #ifdef _WIN32
     if (mode == "codepage437") {
