@@ -14,6 +14,27 @@ public:
         SetConsoleOutputCP(old_cp);
     }
 };
+
+// RAII wrapper for GDI Device Context handle
+class ScopedHDC {
+    HDC hdc_;
+    HWND hwnd_;
+public:
+    ScopedHDC(HWND hwnd) : hwnd_(hwnd) {
+        hdc_ = GetDC(hwnd);
+    }
+    ~ScopedHDC() {
+        if (hdc_) {
+            ReleaseDC(hwnd_, hdc_);
+        }
+    }
+    // Prevent copying to avoid double release
+    ScopedHDC(const ScopedHDC&) = delete;
+    ScopedHDC& operator=(const ScopedHDC&) = delete;
+
+    HDC get() const { return hdc_; }
+    operator bool() const { return hdc_ != NULL; }
+};
 #endif
 #include <locale>
 // Returns true if the ramp contains any non-ASCII (Unicode) characters
@@ -169,14 +190,14 @@ bool captureScreenGDI(std::vector<unsigned char>& buffer, int& width, int& heigh
     static int cachedHeight = 0;
 
     // Get the device context for the entire screen.
-    HDC hScreenDC = GetDC(NULL);
-    if (!hScreenDC) return false;
+    ScopedHDC screenDC(NULL);
+    if (!screenDC) return false;
+    HDC hScreenDC = screenDC.get();
 
     // Initialize Memory DC once
     if (!hMemoryDC) {
         hMemoryDC = CreateCompatibleDC(hScreenDC);
         if (!hMemoryDC) {
-            ReleaseDC(NULL, hScreenDC);
             return false;
         }
     }
@@ -185,7 +206,6 @@ bool captureScreenGDI(std::vector<unsigned char>& buffer, int& width, int& heigh
     height = GetSystemMetrics(SM_CYSCREEN);
 
     if (width <= 0 || height <= 0) {
-        ReleaseDC(NULL, hScreenDC);
         return false;
     }
 
@@ -193,7 +213,6 @@ bool captureScreenGDI(std::vector<unsigned char>& buffer, int& width, int& heigh
     if (width != cachedWidth || height != cachedHeight) {
         HBITMAP hNewBitmap = CreateCompatibleBitmap(hScreenDC, width, height);
         if (!hNewBitmap) {
-            ReleaseDC(NULL, hScreenDC);
             return false;
         }
 
@@ -207,7 +226,6 @@ bool captureScreenGDI(std::vector<unsigned char>& buffer, int& width, int& heigh
 
     // Perform the bit-block transfer from the screen to the memory DC.
     if (!BitBlt(hMemoryDC, 0, 0, width, height, hScreenDC, 0, 0, SRCCOPY)) {
-        ReleaseDC(NULL, hScreenDC);
         return false;
     }
 
@@ -228,9 +246,6 @@ bool captureScreenGDI(std::vector<unsigned char>& buffer, int& width, int& heigh
 
     // Extract the pixel data from the bitmap.
     GetDIBits(hScreenDC, hBitmap, 0, (UINT)height, buffer.data(), (BITMAPINFO*)&bi, DIB_RGB_COLORS);
-
-    // Release the screen DC as we are done with it for this frame
-    ReleaseDC(NULL, hScreenDC);
 
     return true;
 }
