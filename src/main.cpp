@@ -1,5 +1,6 @@
 #ifdef _WIN32
 #include <windows.h>
+#include <conio.h>
 #endif
 // Helper to restore console code page on exit (RAII)
 #ifdef _WIN32
@@ -290,7 +291,7 @@ int main(int argc, char* argv[]) {
     const std::string& ASCII_RAMP = ramp_or_mode;
     const auto frame_duration = std::chrono::milliseconds(1000 / TARGET_FPS);
 
-    std::cout << "Starting screen capture using GDI... Press Ctrl+C to exit.\n";
+    std::cout << "Starting screen capture using GDI... Press 'q' to exit, 'p' to pause.\n";
     std::cout << "Current mode: '" << mode << "' (" << ASCII_RAMP << ")" << std::endl;
     // Set code page for Windows console depending on mode
 #ifdef _WIN32
@@ -317,9 +318,34 @@ int main(int argc, char* argv[]) {
     std::vector<unsigned char> frame_buffer;
     int src_width = 0;
     int src_height = 0;
+    bool paused = false;
 
     while (true) {
         auto start_time = std::chrono::high_resolution_clock::now();
+
+#ifdef _WIN32
+        // Check for user input
+        if (_kbhit()) {
+            int ch = _getch();
+            if (ch == 'q' || ch == 'Q') {
+                break;
+            } else if (ch == 'p' || ch == 'P') {
+                paused = !paused;
+                if (paused) {
+                    // Restore cursor to bottom to print status, then go back?
+                    // Or just let the "Paused" state handle itself.
+                    // For simplicity, we just stop updating.
+                    // But we might want to clear the "Starting..." or last frame partially?
+                    // No, keeping the last frame is better for inspection.
+                }
+            }
+        }
+#endif
+
+        if (paused) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            continue;
+        }
 
         if (!captureScreenGDI(frame_buffer, src_width, src_height)) {
             std::cerr << "Error: Failed to capture screen." << std::endl;
