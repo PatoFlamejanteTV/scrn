@@ -216,7 +216,13 @@ bool captureScreenGDI(std::vector<unsigned char>& buffer, int& width, int& heigh
             return false;
         }
 
-        SelectObject(hMemoryDC, hNewBitmap);
+        // Sentinel: Verify object selection to prevent leaks or state corruption
+        HGDIOBJ hOldObj = SelectObject(hMemoryDC, hNewBitmap);
+        if (hOldObj == NULL || hOldObj == HGDI_ERROR) {
+            DeleteObject(hNewBitmap); // Failed to select, cleanup new resource
+            return false;
+        }
+
         if (hBitmap) DeleteObject(hBitmap);
         hBitmap = hNewBitmap;
 
