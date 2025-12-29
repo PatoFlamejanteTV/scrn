@@ -181,7 +181,7 @@ void reset_cursor() {
  * @param height Output parameter for the screen height.
  * @return True on success, false on failure.
  */
-bool captureScreenGDI(std::vector<unsigned char>& buffer, int& width, int& height) {
+bool captureScreenGDI(std::vector<unsigned char>& buffer, int& width, int& height, int target_width, int target_height) {
     // Optimization: Cache GDI objects (Memory DC and Bitmap) to avoid re-allocation overhead every frame.
     // We do NOT cache hScreenDC as it is a Common DC and should be released after use.
     static HDC hMemoryDC = NULL;
@@ -200,18 +200,21 @@ bool captureScreenGDI(std::vector<unsigned char>& buffer, int& width, int& heigh
         if (!hMemoryDC) {
             return false;
         }
+        // Use HALFTONE for better quality downscaling
+        SetStretchBltMode(hMemoryDC, HALFTONE);
+        SetBrushOrgEx(hMemoryDC, 0, 0, NULL);
     }
 
-    width = GetSystemMetrics(SM_CXSCREEN);
-    height = GetSystemMetrics(SM_CYSCREEN);
+    int screenWidth = GetSystemMetrics(SM_CXSCREEN);
+    int screenHeight = GetSystemMetrics(SM_CYSCREEN);
 
-    if (width <= 0 || height <= 0) {
+    if (screenWidth <= 0 || screenHeight <= 0) {
         return false;
     }
 
-    // Recreate bitmap if resolution changes or on first run
-    if (width != cachedWidth || height != cachedHeight) {
-        HBITMAP hNewBitmap = CreateCompatibleBitmap(hScreenDC, width, height);
+    // Recreate bitmap if target resolution changes or on first run
+    if (target_width != cachedWidth || target_height != cachedHeight) {
+        HBITMAP hNewBitmap = CreateCompatibleBitmap(hScreenDC, target_width, target_height);
         if (!hNewBitmap) {
             return false;
         }
@@ -220,23 +223,27 @@ bool captureScreenGDI(std::vector<unsigned char>& buffer, int& width, int& heigh
         if (hBitmap) DeleteObject(hBitmap);
         hBitmap = hNewBitmap;
 
-        cachedWidth = width;
-        cachedHeight = height;
+        cachedWidth = target_width;
+        cachedHeight = target_height;
     }
 
-    // Perform the bit-block transfer from the screen to the memory DC.
-    if (!BitBlt(hMemoryDC, 0, 0, width, height, hScreenDC, 0, 0, SRCCOPY)) {
+    // Perform the bit-block transfer with downscaling from the screen to the memory DC.
+    if (!StretchBlt(hMemoryDC, 0, 0, target_width, target_height, hScreenDC, 0, 0, screenWidth, screenHeight, SRCCOPY)) {
         return false;
     }
 
     // Setup the bitmap info structure to get the pixel data.
     BITMAPINFOHEADER bi = {};
     bi.biSize = sizeof(BITMAPINFOHEADER);
-    bi.biWidth = width;
-    bi.biHeight = -height; // A negative height indicates a top-down DIB.
+    bi.biWidth = target_width;
+    bi.biHeight = -target_height; // A negative height indicates a top-down DIB.
     bi.biPlanes = 1;
     bi.biBitCount = 32; // We want 32-bit BGRA format.
     bi.biCompression = BI_RGB;
+
+    // Update output width/height to match the buffer content
+    width = target_width;
+    height = target_height;
 
     // Use size_t for calculation to prevent integer overflow
     size_t required_size = static_cast<size_t>(width) * height * 4;
@@ -321,55 +328,36 @@ int main(int argc, char* argv[]) {
     while (true) {
         auto start_time = std::chrono::high_resolution_clock::now();
 
-        if (!captureScreenGDI(frame_buffer, src_width, src_height)) {
+        // Capture screen downscaled to console dimensions directly on GPU/GDI
+        if (!captureScreenGDI(frame_buffer, src_width, src_height, CONSOLE_WIDTH, CONSOLE_HEIGHT)) {
             std::cerr << "Error: Failed to capture screen." << std::endl;
             std::this_thread::sleep_for(std::chrono::seconds(1));
             continue;
         }
 
         const auto* src_data = frame_buffer.data();
-        const float block_width = static_cast<float>(src_width) / CONSOLE_WIDTH;
-        const float block_height = static_cast<float>(src_height) / CONSOLE_HEIGHT;
+
+        // Since we are now capturing exactly at CONSOLE_WIDTH x CONSOLE_HEIGHT,
+        // we can iterate 1-to-1. No nested loops for averaging needed.
 
         std::string ascii_frame;
         ascii_frame.reserve((CONSOLE_WIDTH + 1) * CONSOLE_HEIGHT);
 
         for (int y = 0; y < CONSOLE_HEIGHT; ++y) {
             for (int x = 0; x < CONSOLE_WIDTH; ++x) {
-                const int start_sx = static_cast<int>(x * block_width);
-                const int start_sy = static_cast<int>(y * block_height);
-                const int end_sx = static_cast<int>((x + 1) * block_width);
-                const int end_sy = static_cast<int>((y + 1) * block_height);
+                // Direct pixel access, no averaging loop
+                const auto pixel_offset = (static_cast<size_t>(y) * src_width + x) * 4;
+                const unsigned char b = src_data[pixel_offset];
+                const unsigned char g = src_data[pixel_offset + 1];
+                const unsigned char r = src_data[pixel_offset + 2];
 
-                unsigned long long total_gray = 0;
-                int pixel_count = 0;
+                // Integer approximation of 0.2126*r + 0.7152*g + 0.0722*b using 16-bit fixed point
+                const unsigned char avg_gray = (static_cast<unsigned int>(r) * 13933 +
+                                                static_cast<unsigned int>(g) * 46871 +
+                                                static_cast<unsigned int>(b) * 4732) >> 16;
 
-                for (int sy = start_sy; sy < end_sy; ++sy) {
-                    for (int sx = start_sx; sx < end_sx; ++sx) {
-                        // Use size_t to prevent overflow if image dimensions are large
-                        const auto pixel_offset = (static_cast<size_t>(sy) * src_width + sx) * 4;
-                        const unsigned char b = src_data[pixel_offset];
-                        const unsigned char g = src_data[pixel_offset + 1];
-                        const unsigned char r = src_data[pixel_offset + 2];
-
-                        // Integer approximation of 0.2126*r + 0.7152*g + 0.0722*b using 16-bit fixed point
-                        // 0.2126 * 65536 ~= 13933
-                        // 0.7152 * 65536 ~= 46871
-                        // 0.0722 * 65536 ~= 4732
-                        total_gray += (static_cast<unsigned int>(r) * 13933 +
-                                       static_cast<unsigned int>(g) * 46871 +
-                                       static_cast<unsigned int>(b) * 4732) >> 16;
-                        pixel_count++;
-                    }
-                }
-
-                if (pixel_count > 0) {
-                    const unsigned char avg_gray = total_gray / pixel_count;
-                    const int ramp_index = (avg_gray * (ASCII_RAMP.length() - 1)) / 255;
-                    ascii_frame += ASCII_RAMP[ramp_index];
-                } else {
-                    ascii_frame += ' ';
-                }
+                const int ramp_index = (avg_gray * (ASCII_RAMP.length() - 1)) / 255;
+                ascii_frame += ASCII_RAMP[ramp_index];
             }
             ascii_frame += '\n';
         }
