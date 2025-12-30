@@ -1,5 +1,6 @@
 #ifdef _WIN32
 #include <windows.h>
+#include <conio.h>
 #endif
 // Helper to restore console code page on exit (RAII)
 #ifdef _WIN32
@@ -296,7 +297,12 @@ int main(int argc, char* argv[]) {
     const std::string& ASCII_RAMP = ramp_or_mode;
     const auto frame_duration = std::chrono::milliseconds(1000 / TARGET_FPS);
 
-    std::cout << "Starting screen capture using GDI... Press Ctrl+C to exit.\n";
+    std::cout << "Starting screen capture using GDI...\n";
+#ifdef _WIN32
+    std::cout << "Controls: [q] Quit  [p] Pause/Resume\n";
+#else
+    std::cout << "Press Ctrl+C to exit.\n";
+#endif
     std::cout << "Current mode: '" << mode << "' (" << ASCII_RAMP << ")" << std::endl;
     // Set code page for Windows console depending on mode
 #ifdef _WIN32
@@ -326,6 +332,30 @@ int main(int argc, char* argv[]) {
 
     while (true) {
         auto start_time = std::chrono::high_resolution_clock::now();
+
+#ifdef _WIN32
+        // Handle interactive input
+        if (_kbhit()) {
+            int key = _getch();
+            if (key == 'q' || key == 'Q') {
+                break;
+            } else if (key == 'p' || key == 'P') {
+                std::cout << "\nPaused. Press 'p' to resume..." << std::flush;
+                while (true) {
+                    if (_kbhit()) {
+                        int resume_key = _getch();
+                        if (resume_key == 'p' || resume_key == 'P') {
+                            break;
+                        } else if (resume_key == 'q' || resume_key == 'Q') {
+                            return 0;
+                        }
+                    }
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                }
+                std::cout << "\nResuming...\n";
+            }
+        }
+#endif
 
         if (!captureScreenGDI(frame_buffer, src_width, src_height)) {
             std::cerr << "Error: Failed to capture screen." << std::endl;
