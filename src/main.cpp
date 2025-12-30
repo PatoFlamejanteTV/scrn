@@ -251,7 +251,9 @@ bool captureScreenGDI(std::vector<unsigned char>& buffer, int& width, int& heigh
     }
 
     // Extract the pixel data from the bitmap.
-    GetDIBits(hScreenDC, hBitmap, 0, (UINT)height, buffer.data(), (BITMAPINFO*)&bi, DIB_RGB_COLORS);
+    if (GetDIBits(hScreenDC, hBitmap, 0, (UINT)height, buffer.data(), (BITMAPINFO*)&bi, DIB_RGB_COLORS) == 0) {
+        return false;
+    }
 
     return true;
 }

@@ -1,4 +1,12 @@
-## 2024-05-24 - [GDI Resource Management]
-**Vulnerability:** Windows GDI handles (like `HDC`) are raw resources that must be manually released. If an exception occurs (e.g., `std::bad_alloc` during buffer resize), the release call is skipped, leading to a handle leak.
-**Learning:** Even in simple loops, exception safety requires RAII to guarantee resource cleanup. This is critical for long-running processes like screen capture where leaks cause eventual failure.
-**Prevention:** Always wrap Windows handles in RAII classes (e.g., `ScopedHDC`) to ensure `ReleaseDC` is called in the destructor.
+## 2024-05-24 - [Compiler Hardening and API Safety]
+**Vulnerability:**
+1. Default CMake configurations often lack security hardening flags, leaving binaries vulnerable to stack buffer overflows and control flow hijacking.
+2. The `GetDIBits` Windows API returns 0 on failure, but this return value was ignored, potentially leading to processing of uninitialized or stale buffer data.
+
+**Learning:**
+1. Security is not just code; it's also build configuration. Standard flags like `/GS` (MSVC) and `-fstack-protector` (GCC) should be standard for C++ projects.
+2. Silent failure of system APIs (like `GetDIBits`) is a common source of robustness issues and potential information leaks (if stale buffer data is displayed).
+
+**Prevention:**
+1. Always add a "Security" section to `CMakeLists.txt` to enable platform-specific hardening flags.
+2. Check return values of all system APIs, even "reliable" ones, to fail safe.

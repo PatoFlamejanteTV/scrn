@@ -4,6 +4,16 @@ project(AsciiScreen CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Security: Enable compiler hardening flags
+if(MSVC)
+    # /GS: Buffer Security Check
+    # /guard:cf: Control Flow Guard
+    add_compile_options(/GS /guard:cf)
+else()
+    # GCC/Clang: Stack Smashing Protection
+    add_compile_options(-fstack-protector-strong)
+endif()
+
 # Add screen_capture_lite from the lib directory
 include_directories(lib/screen_capture_lite/include)
 
