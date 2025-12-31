@@ -1,9 +1,25 @@
 #ifdef _WIN32
 #include <windows.h>
 #include <conio.h>
-#endif
+#include <atomic>
+#include <vector>
+
+// Global flag to signal the application to exit
+std::atomic<bool> g_running(true);
+
+// Console Control Handler to handle Ctrl+C and window close events gracefully
+BOOL WINAPI ConsoleHandler(DWORD signal) {
+    if (signal == CTRL_C_EVENT || signal == CTRL_CLOSE_EVENT) {
+        g_running = false;
+        // Return TRUE to indicate we handled the signal.
+        // Windows will still terminate the process after a timeout if we don't exit,
+        // but this gives us a chance to break the loop and run destructors.
+        return TRUE;
+    }
+    return FALSE;
+}
+
 // Helper to restore console code page on exit (RAII)
-#ifdef _WIN32
 class ConsoleCodePageGuard {
     UINT old_cp;
 public:
@@ -36,7 +52,36 @@ public:
     HDC get() const { return hdc_; }
     operator bool() const { return hdc_ != NULL; }
 };
+#else
+#include <atomic>
+#include <vector>
+// Dummy g_running for non-Windows platforms (though they won't use the same loop)
+std::atomic<bool> g_running(true);
 #endif
+
+// RAII wrapper to securely zero memory on destruction
+// Sentinel: Ensures sensitive screen data is wiped from memory before release
+struct SecureBuffer {
+    std::vector<unsigned char> data;
+    ~SecureBuffer() {
+        if (!data.empty()) {
+#ifdef _WIN32
+            SecureZeroMemory(data.data(), data.size());
+#else
+            // Fallback for non-Windows: simplistic overwrite, ideally explicit_bzero or similar
+            // For now, volatile loop to prevent optimization
+            volatile unsigned char* p = data.data();
+            for (size_t i = 0; i < data.size(); ++i) p[i] = 0;
+#endif
+        }
+    }
+    // Helper to act like vector
+    std::vector<unsigned char>& get() { return data; }
+    void resize(size_t size) { data.resize(size); }
+    unsigned char* data_ptr() { return data.data(); }
+    size_t size() const { return data.size(); }
+};
+
 #include <locale>
 // Returns true if the ramp contains any non-ASCII (Unicode) characters
 bool ramp_has_unicode(const std::string& ramp) {
@@ -54,7 +99,7 @@ bool ramp_has_unicode(const std::string& ramp) {
 
 // Platform-specific includes for clearing the console
 #ifdef _WIN32
-#include <windows.h>
+// Includes already handled at top
 #else
 // On non-Windows platforms, this app will not compile with the GDI changes.
 #endif
@@ -292,6 +337,12 @@ bool captureScreenGDI(std::vector<unsigned char>& buffer, int& width, int& heigh
 int main(int argc, char* argv[]) {
 #ifdef _WIN32
     std::unique_ptr<ConsoleCodePageGuard> cp_guard;
+
+    // Sentinel: Register control handler for graceful shutdown
+    // This ensures RAII destructors (like SecureBuffer and ConsoleCodePageGuard) run
+    if (!SetConsoleCtrlHandler(ConsoleHandler, TRUE)) {
+        std::cerr << "Warning: Could not set console control handler.\n";
+    }
 #endif
 #ifdef _WIN32
     // Set Windows console to UTF-8 for Unicode output
@@ -358,11 +409,13 @@ int main(int argc, char* argv[]) {
     }
     std::cout << "\rStarting...       " << std::endl;
 
-    std::vector<unsigned char> frame_buffer;
+    // Sentinel: Use SecureBuffer for frame buffer to ensure memory wiping
+    SecureBuffer frame_buffer;
     int src_width = 0;
     int src_height = 0;
 
-    while (true) {
+    // Sentinel: Use g_running flag to allow graceful exit on Ctrl+C
+    while (g_running) {
         auto start_time = std::chrono::high_resolution_clock::now();
 
 #ifdef _WIN32
@@ -370,32 +423,36 @@ int main(int argc, char* argv[]) {
         if (_kbhit()) {
             int key = _getch();
             if (key == 'q' || key == 'Q') {
+                g_running = false;
                 break;
             } else if (key == 'p' || key == 'P') {
                 std::cout << "\nPaused. Press 'p' to resume..." << std::flush;
-                while (true) {
+                while (g_running) { // Also check g_running here
                     if (_kbhit()) {
                         int resume_key = _getch();
                         if (resume_key == 'p' || resume_key == 'P') {
                             break;
                         } else if (resume_key == 'q' || resume_key == 'Q') {
-                            return 0;
+                            g_running = false;
+                            break;
                         }
                     }
                     std::this_thread::sleep_for(std::chrono::milliseconds(100));
                 }
+                if (!g_running) break;
                 std::cout << "\nResuming...\n";
             }
         }
 #endif
 
-        if (!captureScreenGDI(frame_buffer, src_width, src_height)) {
+        // Pass the underlying vector to the GDI capture function
+        if (!captureScreenGDI(frame_buffer.get(), src_width, src_height)) {
             std::cerr << "Error: Failed to capture screen." << std::endl;
             std::this_thread::sleep_for(std::chrono::seconds(1));
             continue;
         }
 
-        const auto* src_data = frame_buffer.data();
+        const auto* src_data = frame_buffer.data_ptr();
         const float block_width = static_cast<float>(src_width) / CONSOLE_WIDTH;
         const float block_height = static_cast<float>(src_height) / CONSOLE_HEIGHT;
 

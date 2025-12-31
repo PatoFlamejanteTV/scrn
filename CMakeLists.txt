@@ -15,11 +15,11 @@ else()
 endif()
 
 # Add screen_capture_lite from the lib directory
-include_directories(lib/screen_capture_lite/include)
+# include_directories(lib/screen_capture_lite/include) # Removed as directory doesn't exist
 
 add_executable(AsciiScreen src/main.cpp)
 
-# Platform-specific libraries needed by screen_capture_lite
+# Platform-specific libraries needed by screen_capture_lite (if it were used)
 if(WIN32)
     # For Windows, link against GDI and User libraries
     target_link_libraries(AsciiScreen PRIVATE gdi32 user32)
