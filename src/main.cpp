@@ -402,7 +402,8 @@ int main(int argc, char* argv[]) {
         std::string ascii_frame;
         ascii_frame.reserve((CONSOLE_WIDTH + 1) * CONSOLE_HEIGHT);
 
-        for (int y = 0; y < CONSOLE_HEIGHT; ++y) {
+        // Reserve last line for status bar
+        for (int y = 0; y < CONSOLE_HEIGHT - 1; ++y) {
             for (int x = 0; x < CONSOLE_WIDTH; ++x) {
                 const int start_sx = static_cast<int>(x * block_width);
                 const int start_sy = static_cast<int>(y * block_height);
@@ -441,6 +442,17 @@ int main(int argc, char* argv[]) {
             }
             ascii_frame += '\n';
         }
+
+        // Add persistent status bar as the last line
+        std::string status = "[ Mode: " + mode + " ]  Controls: [q] Quit [p] Pause";
+        if (status.length() < CONSOLE_WIDTH) {
+            status.append(CONSOLE_WIDTH - status.length(), ' ');
+        } else if (status.length() > CONSOLE_WIDTH) {
+            // Truncate to avoid wrapping
+            status = status.substr(0, CONSOLE_WIDTH);
+        }
+        ascii_frame += status;
+        // Note: No newline at the very end to prevent scrolling on some terminals if exact size
 
         reset_cursor();
         std::cout << ascii_frame << std::flush;
