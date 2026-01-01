@@ -87,7 +87,22 @@ public:
         if (new_size < buffer_.size()) {
             SecureZeroMemory(buffer_.data() + new_size, buffer_.size() - new_size);
         }
-        buffer_.resize(new_size);
+    }
+    void resize(size_t new_size) {
+        // If the vector needs to grow beyond its capacity, it will reallocate.
+        // The default std::vector::resize would not wipe the old memory block.
+        if (new_size > buffer_.capacity()) {
+            std::vector<unsigned char> new_buffer(new_size);
+            if (!buffer_.empty()) {
+                // Copy old data to new buffer
+                memcpy(new_buffer.data(), buffer_.data(), buffer_.size());
+                // Wipe old buffer before it's deallocated
+                SecureZeroMemory(buffer_.data(), buffer_.size());
+            }
+            buffer_.swap(new_buffer);
+        } else {
+            buffer_.resize(new_size);
+        }
     }
     unsigned char* data() { return buffer_.data(); }
     const unsigned char* data() const { return buffer_.data(); }
