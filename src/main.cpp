@@ -210,27 +210,6 @@ bool captureScreenGDI(std::vector<unsigned char>& buffer, int& width, int& heigh
         return false;
     }
 
-    // Recreate bitmap if resolution changes or on first run
-    if (width != cachedWidth || height != cachedHeight) {
-        HBITMAP hNewBitmap = CreateCompatibleBitmap(hScreenDC, width, height);
-        if (!hNewBitmap) {
-            return false;
-        }
-
-        // Sentinel: Verify object selection to prevent leaks or state corruption
-        HGDIOBJ hOldObj = SelectObject(hMemoryDC, hNewBitmap);
-        if (hOldObj == NULL || hOldObj == HGDI_ERROR) {
-            DeleteObject(hNewBitmap); // Failed to select, cleanup new resource
-            return false;
-        }
-
-        if (hBitmap) DeleteObject(hBitmap);
-        hBitmap = hNewBitmap;
-
-        cachedWidth = width;
-        cachedHeight = height;
-    }
-
     // Update width/height to target console size for downscaling
     int screenW = width;
     int screenH = height;
