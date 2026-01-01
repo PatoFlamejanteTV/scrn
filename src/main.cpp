@@ -57,6 +57,27 @@ bool ramp_has_unicode(const std::string& ramp) {
 class SecureBuffer {
     std::vector<unsigned char> buffer_;
 public:
+    SecureBuffer() = default;
+
+    // Delete copy operations to prevent duplication of sensitive data
+    SecureBuffer(const SecureBuffer&) = delete;
+    SecureBuffer& operator=(const SecureBuffer&) = delete;
+
+    // Implement secure move operations
+    SecureBuffer(SecureBuffer&& other) noexcept {
+        buffer_.swap(other.buffer_);
+    }
+    SecureBuffer& operator=(SecureBuffer&& other) noexcept {
+        if (this != &other) {
+            // Wipe current buffer before overwriting
+            if (!buffer_.empty()) {
+                SecureZeroMemory(buffer_.data(), buffer_.size());
+            }
+            buffer_.swap(other.buffer_);
+        }
+        return *this;
+    }
+
     ~SecureBuffer() {
         if (!buffer_.empty()) {
             SecureZeroMemory(buffer_.data(), buffer_.size());
