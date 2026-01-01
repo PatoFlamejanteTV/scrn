@@ -58,52 +58,32 @@ class SecureBuffer {
     std::vector<unsigned char> buffer_;
 public:
     SecureBuffer() = default;
-
-    // Delete copy operations to prevent duplication of sensitive data
-    SecureBuffer(const SecureBuffer&) = delete;
-    SecureBuffer& operator=(const SecureBuffer&) = delete;
-
-    // Implement secure move operations
-    SecureBuffer(SecureBuffer&& other) noexcept {
-        buffer_.swap(other.buffer_);
-    }
-    SecureBuffer& operator=(SecureBuffer&& other) noexcept {
-        if (this != &other) {
-            // Wipe current buffer before overwriting
-            if (!buffer_.empty()) {
-                SecureZeroMemory(buffer_.data(), buffer_.size());
-            }
-            buffer_.swap(other.buffer_);
-        }
-        return *this;
-    }
-
     ~SecureBuffer() {
         if (!buffer_.empty()) {
             SecureZeroMemory(buffer_.data(), buffer_.size());
         }
     }
+    // Prevent accidental copying which would leave unwiped duplicates
+    SecureBuffer(const SecureBuffer&) = delete;
+    SecureBuffer& operator=(const SecureBuffer&) = delete;
+
     void resize(size_t new_size) {
         if (new_size < buffer_.size()) {
+            // Wipe the data we are about to discard
             SecureZeroMemory(buffer_.data() + new_size, buffer_.size() - new_size);
         }
+        buffer_.resize(new_size);
     }
-    void resize(size_t new_size) {
-        // If the vector needs to grow beyond its capacity, it will reallocate.
-        // The default std::vector::resize would not wipe the old memory block.
-        if (new_size > buffer_.capacity()) {
-            std::vector<unsigned char> new_buffer(new_size);
-            if (!buffer_.empty()) {
-                // Copy old data to new buffer
-                memcpy(new_buffer.data(), buffer_.data(), buffer_.size());
-                // Wipe old buffer before it's deallocated
-                SecureZeroMemory(buffer_.data(), buffer_.size());
-            }
-            buffer_.swap(new_buffer);
-        } else {
-            buffer_.resize(new_size);
-        }
-    }
+    unsigned char* data() { return buffer_.data(); }
+    const unsigned char* data() const { return buffer_.data(); }
+    size_t size() const { return buffer_.size(); }
+};
+#else
+// Fallback for non-Windows platforms (no secure wipe)
+class SecureBuffer {
+    std::vector<unsigned char> buffer_;
+public:
+    void resize(size_t new_size) { buffer_.resize(new_size); }
     unsigned char* data() { return buffer_.data(); }
     const unsigned char* data() const { return buffer_.data(); }
     size_t size() const { return buffer_.size(); }
