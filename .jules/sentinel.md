@@ -10,3 +10,13 @@
 **Prevention:**
 1. Always add a "Security" section to `CMakeLists.txt` to enable platform-specific hardening flags.
 2. Check return values of all system APIs, even "reliable" ones, to fail safe.
+
+## 2024-05-25 - [Secure Memory Erasure]
+**Vulnerability:**
+Sensitive data (like screen captures) stored in standard containers (e.g., `std::vector`) remains in heap memory after the object is destroyed, potentially allowing data recovery by other processes or crash dumps.
+
+**Learning:**
+Standard C++ containers do not zero-out memory upon destruction.
+
+**Prevention:**
+Use a RAII wrapper (e.g., `SecureBuffer`) that explicitly calls platform-specific memory wiping functions (like `SecureZeroMemory` on Windows or `explicit_bzero` on Linux) in its destructor.
