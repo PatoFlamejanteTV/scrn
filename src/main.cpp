@@ -62,7 +62,12 @@ public:
             SecureZeroMemory(buffer_.data(), buffer_.size());
         }
     }
-    void resize(size_t new_size) { buffer_.resize(new_size); }
+    void resize(size_t new_size) {
+        if (new_size < buffer_.size()) {
+            SecureZeroMemory(buffer_.data() + new_size, buffer_.size() - new_size);
+        }
+        buffer_.resize(new_size);
+    }
     unsigned char* data() { return buffer_.data(); }
     const unsigned char* data() const { return buffer_.data(); }
     size_t size() const { return buffer_.size(); }
