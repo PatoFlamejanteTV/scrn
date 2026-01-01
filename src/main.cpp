@@ -404,7 +404,8 @@ int main(int argc, char* argv[]) {
         std::string ascii_frame;
         ascii_frame.reserve((CONSOLE_WIDTH + 1) * CONSOLE_HEIGHT);
 
-        for (int y = 0; y < CONSOLE_HEIGHT; ++y) {
+        // Reserve last line for status bar
+        for (int y = 0; y < CONSOLE_HEIGHT - 1; ++y) {
             // Precompute row offset
             const size_t row_offset = static_cast<size_t>(y) * CONSOLE_WIDTH * 4;
 
@@ -427,6 +428,15 @@ int main(int argc, char* argv[]) {
             }
             ascii_frame += '\n';
         }
+
+        // Palette: Add status bar at the bottom
+        std::string status = " [ AsciiScreen ] Mode: " + mode + " | [P]ause [Q]uit";
+        if (status.length() < CONSOLE_WIDTH) {
+            status.append(CONSOLE_WIDTH - status.length(), ' ');
+        } else {
+            status = status.substr(0, CONSOLE_WIDTH);
+        }
+        ascii_frame += status;
 
         reset_cursor();
         std::cout << ascii_frame << std::flush;
