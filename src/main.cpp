@@ -52,6 +52,44 @@ bool ramp_has_unicode(const std::string& ramp) {
 #include <thread>
 #include <memory>
 
+#ifdef _WIN32
+// Secure wrapper for sensitive memory that wipes data on destruction
+class SecureBuffer {
+    std::vector<unsigned char> buffer_;
+public:
+    SecureBuffer() = default;
+    ~SecureBuffer() {
+        if (!buffer_.empty()) {
+            SecureZeroMemory(buffer_.data(), buffer_.size());
+        }
+    }
+    // Prevent accidental copying which would leave unwiped duplicates
+    SecureBuffer(const SecureBuffer&) = delete;
+    SecureBuffer& operator=(const SecureBuffer&) = delete;
+
+    void resize(size_t new_size) {
+        if (new_size < buffer_.size()) {
+            // Wipe the data we are about to discard
+            SecureZeroMemory(buffer_.data() + new_size, buffer_.size() - new_size);
+        }
+        buffer_.resize(new_size);
+    }
+    unsigned char* data() { return buffer_.data(); }
+    const unsigned char* data() const { return buffer_.data(); }
+    size_t size() const { return buffer_.size(); }
+};
+#else
+// Fallback for non-Windows platforms (no secure wipe)
+class SecureBuffer {
+    std::vector<unsigned char> buffer_;
+public:
+    void resize(size_t new_size) { buffer_.resize(new_size); }
+    unsigned char* data() { return buffer_.data(); }
+    const unsigned char* data() const { return buffer_.data(); }
+    size_t size() const { return buffer_.size(); }
+};
+#endif
+
 // Platform-specific includes for clearing the console
 #ifdef _WIN32
 #include <windows.h>
@@ -182,7 +220,7 @@ void reset_cursor() {
  * @param height Output parameter for the screen height.
  * @return True on success, false on failure.
  */
-bool captureScreenGDI(std::vector<unsigned char>& buffer, int& width, int& height) {
+bool captureScreenGDI(SecureBuffer& buffer, int& width, int& height) {
     // Optimization: Cache GDI objects (Memory DC and Bitmap) to avoid re-allocation overhead every frame.
     // We do NOT cache hScreenDC as it is a Common DC and should be released after use.
     static HDC hMemoryDC = NULL;
@@ -358,7 +396,7 @@ int main(int argc, char* argv[]) {
     }
     std::cout << "\rStarting...       " << std::endl;
 
-    std::vector<unsigned char> frame_buffer;
+    SecureBuffer frame_buffer;
     int src_width = 0;
     int src_height = 0;
 
