@@ -437,6 +437,7 @@ int main(int argc, char* argv[]) {
             status = status.substr(0, CONSOLE_WIDTH);
         }
         ascii_frame += status;
+        ascii_frame += '\n';
 
         reset_cursor();
         std::cout << ascii_frame << std::flush;
