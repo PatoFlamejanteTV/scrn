@@ -71,6 +71,15 @@ public:
         if (new_size < buffer_.size()) {
             // Wipe the data we are about to discard
             SecureZeroMemory(buffer_.data() + new_size, buffer_.size() - new_size);
+        } else if (new_size > buffer_.capacity()) {
+            // Sentinel: When growing beyond capacity, std::vector reallocates and frees the old buffer.
+            // To prevent sensitive data leakage in the heap, we must wipe the old buffer
+            // BEFORE the vector frees it.
+            // Note: This effectively clears the buffer content. This is acceptable for
+            // 'frame_buffer' as it is immediately overwritten by screen capture data.
+            if (!buffer_.empty()) {
+                SecureZeroMemory(buffer_.data(), buffer_.size());
+            }
         }
         buffer_.resize(new_size);
     }
