@@ -379,6 +379,11 @@ int main(int argc, char* argv[]) {
     int src_width = 0;
     int src_height = 0;
 
+    // Palette: FPS tracking variables
+    int frames_count = 0;
+    int current_fps = 0;
+    auto last_fps_time = std::chrono::high_resolution_clock::now();
+
     while (true) {
         auto start_time = std::chrono::high_resolution_clock::now();
 
@@ -447,7 +452,7 @@ int main(int argc, char* argv[]) {
         }
 
         // Palette: Add status bar at the bottom
-        std::string status = " [ AsciiScreen ] Mode: " + mode + " | [P]ause [Q]uit";
+        std::string status = " [ AsciiScreen ] Mode: " + mode + " | FPS: " + std::to_string(current_fps) + " | [P]ause [Q]uit";
         if (status.length() < CONSOLE_WIDTH) {
             status.append(CONSOLE_WIDTH - status.length(), ' ');
         } else {
@@ -463,6 +468,15 @@ int main(int argc, char* argv[]) {
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
         if (elapsed < frame_duration) {
             std::this_thread::sleep_for(frame_duration - elapsed);
+        }
+
+        // Palette: Update FPS counter
+        frames_count++;
+        auto now = std::chrono::high_resolution_clock::now();
+        if (std::chrono::duration_cast<std::chrono::seconds>(now - last_fps_time).count() >= 1) {
+            current_fps = frames_count;
+            frames_count = 0;
+            last_fps_time = now;
         }
     }
     return 0;
