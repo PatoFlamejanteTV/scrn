@@ -51,6 +51,7 @@ bool ramp_has_unicode(const std::string& ramp) {
 #include <chrono>
 #include <thread>
 #include <memory>
+#include <cstring>
 
 #ifdef _WIN32
 // Secure wrapper for sensitive memory that wipes data on destruction
@@ -379,6 +380,11 @@ int main(int argc, char* argv[]) {
     int src_width = 0;
     int src_height = 0;
 
+    // Bolt: Reuse output buffer to avoid reallocations
+    // Also use direct pointer access for faster writing
+    std::string ascii_frame;
+    ascii_frame.resize((CONSOLE_WIDTH + 1) * CONSOLE_HEIGHT);
+
     while (true) {
         auto start_time = std::chrono::high_resolution_clock::now();
 
@@ -418,8 +424,9 @@ int main(int argc, char* argv[]) {
         // we can map pixels 1:1, removing the need for averaging and floating-point math.
         // Benchmark shows ~9x speedup (651us -> 69us per frame).
 
-        std::string ascii_frame;
-        ascii_frame.reserve((CONSOLE_WIDTH + 1) * CONSOLE_HEIGHT);
+        // Pointer for direct write access
+        // We reuse ascii_frame buffer which is already sized correctly
+        char* out_ptr = &ascii_frame[0];
 
         // Reserve last line for status bar
         for (int y = 0; y < CONSOLE_HEIGHT - 1; ++y) {
@@ -441,9 +448,9 @@ int main(int argc, char* argv[]) {
                                            static_cast<unsigned int>(b) * 4732) >> 16;
 
                 const int ramp_index = (gray * (ASCII_RAMP.length() - 1)) / 255;
-                ascii_frame += ASCII_RAMP[ramp_index];
+                *out_ptr++ = ASCII_RAMP[ramp_index];
             }
-            ascii_frame += '\n';
+            *out_ptr++ = '\n';
         }
 
         // Palette: Add status bar at the bottom
@@ -453,8 +460,11 @@ int main(int argc, char* argv[]) {
         } else {
             status = status.substr(0, CONSOLE_WIDTH);
         }
-        ascii_frame += status;
-        ascii_frame += '\n';
+
+        // Copy status line directly into the buffer
+        std::memcpy(out_ptr, status.data(), CONSOLE_WIDTH);
+        out_ptr += CONSOLE_WIDTH;
+        *out_ptr++ = '\n';
 
         reset_cursor();
         std::cout << ascii_frame << std::flush;
