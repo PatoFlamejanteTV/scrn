@@ -51,6 +51,7 @@ bool ramp_has_unicode(const std::string& ramp) {
 #include <chrono>
 #include <thread>
 #include <memory>
+#include <atomic>
 
 #ifdef _WIN32
 // Secure wrapper for sensitive memory that wipes data on destruction
@@ -68,9 +69,14 @@ public:
     SecureBuffer& operator=(const SecureBuffer&) = delete;
 
     void resize(size_t new_size) {
-        if (new_size < buffer_.size()) {
-            // Wipe the data we are about to discard
-            SecureZeroMemory(buffer_.data() + new_size, buffer_.size() - new_size);
+        // Sentinel: Wipe data before any size change to prevent
+        // sensitive data from lingering in freed heap blocks (on growth)
+        // or unused tail (on shrink).
+        size_t old_size = buffer_.size();
+        if (new_size < old_size) {
+            SecureZeroMemory(buffer_.data() + new_size, old_size - new_size);
+        } else if (new_size > old_size && old_size > 0) {
+            SecureZeroMemory(buffer_.data(), old_size);
         }
         buffer_.resize(new_size);
     }
@@ -306,9 +312,42 @@ bool captureScreenGDI(SecureBuffer& buffer, int& width, int& height) {
     return true;
 }
 
+// Sentinel: Global flag for secure termination
+std::atomic<bool> g_running(true);
+
+#ifdef _WIN32
+// Sentinel: Handle Ctrl+C to ensure RAII destructors (like SecureBuffer) run
+BOOL WINAPI ConsoleHandler(DWORD signal) {
+    if (signal == CTRL_C_EVENT ||
+        signal == CTRL_CLOSE_EVENT ||
+        signal == CTRL_BREAK_EVENT ||
+        signal == CTRL_LOGOFF_EVENT ||
+        signal == CTRL_SHUTDOWN_EVENT) {
+        g_running = false;
+
+        // Unblock the main thread if it's waiting on _getch()
+        // by simulating a 'q' key press.
+        INPUT_RECORD record = { 0 };
+        record.EventType = KEY_EVENT;
+        record.Event.KeyEvent.bKeyDown = TRUE;
+        record.Event.KeyEvent.wVirtualKeyCode = 'Q';
+        record.Event.KeyEvent.uChar.AsciiChar = 'q';
+        DWORD written = 0;
+        WriteConsoleInput(GetStdHandle(STD_INPUT_HANDLE), &record, 1, &written);
+
+        return TRUE;
+    }
+    return FALSE;
+}
+#endif
+
 int main(int argc, char* argv[]) {
 #ifdef _WIN32
     std::unique_ptr<ConsoleCodePageGuard> cp_guard;
+    // SetConsoleCtrlHandler ensures destructors run on exit
+    if (!SetConsoleCtrlHandler(ConsoleHandler, TRUE)) {
+        std::cerr << "Warning: Could not set console control handler.\n";
+    }
 #endif
 #ifdef _WIN32
     // Set Windows console to UTF-8 for Unicode output
@@ -379,7 +418,7 @@ int main(int argc, char* argv[]) {
     int src_width = 0;
     int src_height = 0;
 
-    while (true) {
+    while (g_running) {
         auto start_time = std::chrono::high_resolution_clock::now();
 
 #ifdef _WIN32
@@ -387,10 +426,11 @@ int main(int argc, char* argv[]) {
         if (_kbhit()) {
             int key = _getch();
             if (key == 'q' || key == 'Q') {
+                g_running = false;
                 break;
             } else if (key == 'p' || key == 'P') {
                 std::cout << "\nPaused. Press 'p' to resume..." << std::flush;
-                while (true) {
+                while (g_running) {
                     if (_kbhit()) {
                         int resume_key = _getch();
                         if (resume_key == 'p' || resume_key == 'P') {
