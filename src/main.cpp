@@ -379,6 +379,10 @@ int main(int argc, char* argv[]) {
     int src_width = 0;
     int src_height = 0;
 
+    int frame_count = 0;
+    int current_fps = 0;
+    auto last_fps_time = std::chrono::high_resolution_clock::now();
+
     while (true) {
         auto start_time = std::chrono::high_resolution_clock::now();
 
@@ -389,7 +393,17 @@ int main(int argc, char* argv[]) {
             if (key == 'q' || key == 'Q') {
                 break;
             } else if (key == 'p' || key == 'P') {
-                std::cout << "\nPaused. Press 'p' to resume..." << std::flush;
+                // Update status bar to indicate pause without scrolling
+                HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+                CONSOLE_SCREEN_BUFFER_INFO csbi;
+                GetConsoleScreenBufferInfo(hConsole, &csbi);
+                SHORT width = csbi.dwSize.X;
+                SHORT height = csbi.dwSize.Y;
+                COORD statusPos = {0, (SHORT)(height - 1)};
+                std::string pauseMsg = " [ PAUSED ] Press 'p' to resume...";
+                if (pauseMsg.length() < width) pauseMsg.append(width - pauseMsg.length(), ' ');
+                std::cout << pauseMsg << std::flush;
+
                 while (true) {
                     if (_kbhit()) {
                         int resume_key = _getch();
@@ -401,7 +415,6 @@ int main(int argc, char* argv[]) {
                     }
                     std::this_thread::sleep_for(std::chrono::milliseconds(100));
                 }
-                std::cout << "\nResuming...\n";
             }
         }
 #endif
@@ -447,7 +460,7 @@ int main(int argc, char* argv[]) {
         }
 
         // Palette: Add status bar at the bottom
-        std::string status = " [ AsciiScreen ] Mode: " + mode + " | [P]ause [Q]uit";
+        std::string status = " [ AsciiScreen ] Mode: " + mode + " | FPS: " + std::to_string(current_fps) + " | [P]ause [Q]uit";
         if (status.length() < CONSOLE_WIDTH) {
             status.append(CONSOLE_WIDTH - status.length(), ' ');
         } else {
@@ -459,7 +472,15 @@ int main(int argc, char* argv[]) {
         reset_cursor();
         std::cout << ascii_frame << std::flush;
 
+        frame_count++;
         auto end_time = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration<double>(end_time - last_fps_time);
+        if (duration.count() >= 1.0) {
+            current_fps = static_cast<int>(frame_count / duration.count());
+            frame_count = 0;
+            last_fps_time = end_time;
+        }
+
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
         if (elapsed < frame_duration) {
             std::this_thread::sleep_for(frame_duration - elapsed);
