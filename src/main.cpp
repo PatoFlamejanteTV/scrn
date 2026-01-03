@@ -472,8 +472,9 @@ int main(int argc, char* argv[]) {
 
         frame_count++;
         auto end_time = std::chrono::high_resolution_clock::now();
-        if (std::chrono::duration_cast<std::chrono::seconds>(end_time - last_fps_time).count() >= 1) {
-            current_fps = frame_count;
+        auto duration = std::chrono::duration<double>(end_time - last_fps_time);
+        if (duration.count() >= 1.0) {
+            current_fps = static_cast<int>(frame_count / duration.count());
             frame_count = 0;
             last_fps_time = end_time;
         }
