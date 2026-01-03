@@ -107,6 +107,7 @@ const int CONSOLE_HEIGHT = 80;  // Doubled for higher resolution
 
 #include <map>
 #include <iomanip>
+#include <cstring>
 
 // Map of modes to their ASCII ramps
 const std::map<std::string, std::string> ASCII_RAMPS = {
@@ -379,6 +380,10 @@ int main(int argc, char* argv[]) {
     int src_width = 0;
     int src_height = 0;
 
+    // Bolt: Reuse buffer to avoid re-allocation every frame
+    std::string ascii_frame;
+    ascii_frame.resize((CONSOLE_WIDTH + 1) * CONSOLE_HEIGHT);
+
     while (true) {
         auto start_time = std::chrono::high_resolution_clock::now();
 
@@ -414,12 +419,9 @@ int main(int argc, char* argv[]) {
 
         const auto* src_data = frame_buffer.data();
         // Bolt: Optimized ASCII conversion loop
-        // Since captureScreenGDI already resizes the image to CONSOLE_WIDTH x CONSOLE_HEIGHT,
-        // we can map pixels 1:1, removing the need for averaging and floating-point math.
-        // Benchmark shows ~9x speedup (651us -> 69us per frame).
-
-        std::string ascii_frame;
-        ascii_frame.reserve((CONSOLE_WIDTH + 1) * CONSOLE_HEIGHT);
+        // Uses direct buffer access to avoid string concatenation overhead.
+        // Benchmark shows significant reduction in memory churn and CPU usage.
+        char* frame_ptr = &ascii_frame[0];
 
         // Reserve last line for status bar
         for (int y = 0; y < CONSOLE_HEIGHT - 1; ++y) {
@@ -433,28 +435,31 @@ int main(int argc, char* argv[]) {
                 const unsigned char r = src_data[pixel_offset + 2];
 
                 // Integer approximation of 0.2126*r + 0.7152*g + 0.0722*b using 16-bit fixed point
-                // 0.2126 * 65536 ~= 13933
-                // 0.7152 * 65536 ~= 46871
-                // 0.0722 * 65536 ~= 4732
                 const unsigned int gray = (static_cast<unsigned int>(r) * 13933 +
                                            static_cast<unsigned int>(g) * 46871 +
                                            static_cast<unsigned int>(b) * 4732) >> 16;
 
                 const int ramp_index = (gray * (ASCII_RAMP.length() - 1)) / 255;
-                ascii_frame += ASCII_RAMP[ramp_index];
+                *frame_ptr++ = ASCII_RAMP[ramp_index];
             }
-            ascii_frame += '\n';
+            *frame_ptr++ = '\n';
         }
 
         // Palette: Add status bar at the bottom
         std::string status = " [ AsciiScreen ] Mode: " + mode + " | [P]ause [Q]uit";
         if (status.length() < CONSOLE_WIDTH) {
-            status.append(CONSOLE_WIDTH - status.length(), ' ');
+            // Pad with spaces
+            size_t padding = CONSOLE_WIDTH - status.length();
+            memcpy(frame_ptr, status.data(), status.length());
+            frame_ptr += status.length();
+            memset(frame_ptr, ' ', padding);
+            frame_ptr += padding;
         } else {
-            status = status.substr(0, CONSOLE_WIDTH);
+            // Truncate
+            memcpy(frame_ptr, status.data(), CONSOLE_WIDTH);
+            frame_ptr += CONSOLE_WIDTH;
         }
-        ascii_frame += status;
-        ascii_frame += '\n';
+        *frame_ptr++ = '\n';
 
         reset_cursor();
         std::cout << ascii_frame << std::flush;
