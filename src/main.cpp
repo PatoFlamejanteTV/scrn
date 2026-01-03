@@ -395,11 +395,13 @@ int main(int argc, char* argv[]) {
             } else if (key == 'p' || key == 'P') {
                 // Update status bar to indicate pause without scrolling
                 HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
-                COORD statusPos = {0, (SHORT)(CONSOLE_HEIGHT - 1)};
-                SetConsoleCursorPosition(hConsole, statusPos);
-
+                CONSOLE_SCREEN_BUFFER_INFO csbi;
+                GetConsoleScreenBufferInfo(hConsole, &csbi);
+                SHORT width = csbi.dwSize.X;
+                SHORT height = csbi.dwSize.Y;
+                COORD statusPos = {0, (SHORT)(height - 1)};
                 std::string pauseMsg = " [ PAUSED ] Press 'p' to resume...";
-                if (pauseMsg.length() < CONSOLE_WIDTH) pauseMsg.append(CONSOLE_WIDTH - pauseMsg.length(), ' ');
+                if (pauseMsg.length() < width) pauseMsg.append(width - pauseMsg.length(), ' ');
                 std::cout << pauseMsg << std::flush;
 
                 while (true) {
