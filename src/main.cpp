@@ -315,7 +315,11 @@ std::atomic<bool> g_running(true);
 #ifdef _WIN32
 // Sentinel: Handle Ctrl+C to ensure RAII destructors (like SecureBuffer) run
 BOOL WINAPI ConsoleHandler(DWORD signal) {
-    if (signal == CTRL_C_EVENT || signal == CTRL_CLOSE_EVENT || signal == CTRL_BREAK_EVENT) {
+    if (signal == CTRL_C_EVENT ||
+        signal == CTRL_CLOSE_EVENT ||
+        signal == CTRL_BREAK_EVENT ||
+        signal == CTRL_LOGOFF_EVENT ||
+        signal == CTRL_SHUTDOWN_EVENT) {
         g_running = false;
         return TRUE;
     }
