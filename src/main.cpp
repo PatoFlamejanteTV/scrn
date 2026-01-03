@@ -324,6 +324,17 @@ BOOL WINAPI ConsoleHandler(DWORD signal) {
         signal == CTRL_LOGOFF_EVENT ||
         signal == CTRL_SHUTDOWN_EVENT) {
         g_running = false;
+
+        // Unblock the main thread if it's waiting on _getch()
+        // by simulating a 'q' key press.
+        INPUT_RECORD record = { 0 };
+        record.EventType = KEY_EVENT;
+        record.Event.KeyEvent.bKeyDown = TRUE;
+        record.Event.KeyEvent.wVirtualKeyCode = 'Q';
+        record.Event.KeyEvent.uChar.AsciiChar = 'q';
+        DWORD written = 0;
+        WriteConsoleInput(GetStdHandle(STD_INPUT_HANDLE), &record, 1, &written);
+
         return TRUE;
     }
     return FALSE;
