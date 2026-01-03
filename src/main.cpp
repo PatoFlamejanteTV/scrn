@@ -72,8 +72,11 @@ public:
         // Sentinel: Wipe data before any size change to prevent
         // sensitive data from lingering in freed heap blocks (on growth)
         // or unused tail (on shrink).
-        if (buffer_.size() != new_size && !buffer_.empty()) {
-            SecureZeroMemory(buffer_.data(), buffer_.size());
+        size_t old_size = buffer_.size();
+        if (new_size < old_size) {
+            SecureZeroMemory(buffer_.data() + new_size, old_size - new_size);
+        } else if (new_size > old_size && old_size > 0) {
+            SecureZeroMemory(buffer_.data(), old_size);
         }
         buffer_.resize(new_size);
     }
