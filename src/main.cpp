@@ -343,29 +343,29 @@ int main(int argc, char* argv[]) {
             break;
         }
     }
-    const std::string& ASCII_RAMP = ramp_or_mode;
+    std::string current_ramp = ramp_or_mode;
     const auto frame_duration = std::chrono::milliseconds(1000 / TARGET_FPS);
 
     std::cout << "Starting screen capture using GDI...\n";
 #ifdef _WIN32
-    std::cout << "Controls: [q] Quit  [p] Pause/Resume\n";
+    std::cout << "Controls: [q] Quit  [p] Pause/Resume  [m] Cycle Mode\n";
 #else
     std::cout << "Press Ctrl+C to exit.\n";
 #endif
-    std::cout << "Current mode: '" << mode << "' (" << ASCII_RAMP << ")" << std::endl;
+    std::cout << "Current mode: '" << mode << "' (" << current_ramp << ")" << std::endl;
     // Set code page for Windows console depending on mode
 #ifdef _WIN32
     if (mode == "codepage437") {
         cp_guard = std::make_unique<ConsoleCodePageGuard>(437);
         std::cout << "\n[Info] Using code page 437 (OEM US) for this mode.\n";
         std::cout << "[Tip] For best results, use a raster font or 'Terminal' font in your console.\n";
-    } else if (ramp_has_unicode(ASCII_RAMP)) {
+    } else if (ramp_has_unicode(current_ramp)) {
         cp_guard = std::make_unique<ConsoleCodePageGuard>(65001);
         std::cout << "\n[Info] This mode uses Unicode characters.\n";
         std::cout << "[Tip] For best results, use a Unicode font (like 'Consolas' or 'Cascadia Mono') in your terminal.\n";
     }
 #else
-    if (ramp_has_unicode(ASCII_RAMP)) {
+    if (ramp_has_unicode(current_ramp)) {
         std::cout << "\n[Info] This mode uses Unicode characters.\n";
     }
 #endif
@@ -392,6 +392,21 @@ int main(int argc, char* argv[]) {
             int key = _getch();
             if (key == 'q' || key == 'Q') {
                 break;
+            } else if (key == 'm' || key == 'M') {
+                auto it = ASCII_RAMPS.find(mode);
+                if (it != ASCII_RAMPS.end()) {
+                    ++it;
+                    if (it == ASCII_RAMPS.end()) it = ASCII_RAMPS.begin();
+                    mode = it->first;
+                    current_ramp = it->second;
+
+                    // Update code page if needed
+                    if (mode == "codepage437") {
+                        cp_guard = std::make_unique<ConsoleCodePageGuard>(437);
+                    } else if (ramp_has_unicode(current_ramp)) {
+                        cp_guard = std::make_unique<ConsoleCodePageGuard>(65001);
+                    }
+                }
             } else if (key == 'p' || key == 'P') {
                 // Update status bar to indicate pause without scrolling
                 HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
@@ -453,14 +468,18 @@ int main(int argc, char* argv[]) {
                                            static_cast<unsigned int>(g) * 46871 +
                                            static_cast<unsigned int>(b) * 4732) >> 16;
 
-                const int ramp_index = (gray * (ASCII_RAMP.length() - 1)) / 255;
-                ascii_frame += ASCII_RAMP[ramp_index];
+                const int ramp_index = (gray * (current_ramp.length() - 1)) / 255;
+                ascii_frame += current_ramp[ramp_index];
             }
             ascii_frame += '\n';
         }
 
         // Palette: Add status bar at the bottom
-        std::string status = " [ AsciiScreen ] Mode: " + mode + " | FPS: " + std::to_string(current_fps) + " | [P]ause [Q]uit";
+#ifdef _WIN32
+        std::string status = " [ AsciiScreen ] Mode: " + mode + " | FPS: " + std::to_string(current_fps) + " | [P]ause [M]ode [Q]uit";
+#else
+        std::string status = " [ AsciiScreen ] Mode: " + mode + " | FPS: " + std::to_string(current_fps);
+#endif
         if (status.length() < CONSOLE_WIDTH) {
             status.append(CONSOLE_WIDTH - status.length(), ' ');
         } else {
