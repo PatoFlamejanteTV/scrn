@@ -107,6 +107,7 @@ const int CONSOLE_HEIGHT = 80;  // Doubled for higher resolution
 
 #include <map>
 #include <iomanip>
+#include <cstring>
 
 // Map of modes to their ASCII ramps
 const std::map<std::string, std::string> ASCII_RAMPS = {
@@ -376,6 +377,9 @@ int main(int argc, char* argv[]) {
     std::cout << "\rStarting...       " << std::endl;
 
     SecureBuffer frame_buffer;
+    // Sentinel: Use SecureBuffer for the output frame to ensure sensitive screen data
+    // is securely wiped from memory when the application exits or the buffer is reallocated.
+    SecureBuffer ascii_frame_buffer;
     int src_width = 0;
     int src_height = 0;
 
@@ -431,8 +435,14 @@ int main(int argc, char* argv[]) {
         // we can map pixels 1:1, removing the need for averaging and floating-point math.
         // Benchmark shows ~9x speedup (651us -> 69us per frame).
 
-        std::string ascii_frame;
-        ascii_frame.reserve((CONSOLE_WIDTH + 1) * CONSOLE_HEIGHT);
+        const size_t frame_size = static_cast<size_t>(CONSOLE_HEIGHT) * (CONSOLE_WIDTH + 1);
+        if (ascii_frame_buffer.size() != frame_size) {
+            ascii_frame_buffer.resize(frame_size);
+        }
+
+        // Sentinel: Use raw pointer access for performance and to write directly to secure buffer
+        char* out_ptr = reinterpret_cast<char*>(ascii_frame_buffer.data());
+        size_t cursor = 0;
 
         // Reserve last line for status bar
         for (int y = 0; y < CONSOLE_HEIGHT - 1; ++y) {
@@ -454,9 +464,9 @@ int main(int argc, char* argv[]) {
                                            static_cast<unsigned int>(b) * 4732) >> 16;
 
                 const int ramp_index = (gray * (ASCII_RAMP.length() - 1)) / 255;
-                ascii_frame += ASCII_RAMP[ramp_index];
+                out_ptr[cursor++] = ASCII_RAMP[ramp_index];
             }
-            ascii_frame += '\n';
+            out_ptr[cursor++] = '\n';
         }
 
         // Palette: Add status bar at the bottom
@@ -466,11 +476,16 @@ int main(int argc, char* argv[]) {
         } else {
             status = status.substr(0, CONSOLE_WIDTH);
         }
-        ascii_frame += status;
-        ascii_frame += '\n';
+        // Copy status string to the secure buffer
+        if (cursor + status.length() < ascii_frame_buffer.size()) {
+             memcpy(out_ptr + cursor, status.data(), status.length());
+             cursor += status.length();
+        }
+        out_ptr[cursor++] = '\n';
 
         reset_cursor();
-        std::cout << ascii_frame << std::flush;
+        std::cout.write(out_ptr, cursor);
+        std::cout.flush();
 
         frame_count++;
         auto end_time = std::chrono::high_resolution_clock::now();
