@@ -383,6 +383,12 @@ int main(int argc, char* argv[]) {
     int current_fps = 0;
     auto last_fps_time = std::chrono::high_resolution_clock::now();
 
+    // Bolt: Precompute lookup table to avoid division per pixel
+    std::vector<char> ramp_lookup(256);
+    for (int i = 0; i < 256; ++i) {
+        ramp_lookup[i] = ASCII_RAMP[(i * (ASCII_RAMP.length() - 1)) / 255];
+    }
+
     while (true) {
         auto start_time = std::chrono::high_resolution_clock::now();
 
@@ -453,8 +459,8 @@ int main(int argc, char* argv[]) {
                                            static_cast<unsigned int>(g) * 46871 +
                                            static_cast<unsigned int>(b) * 4732) >> 16;
 
-                const int ramp_index = (gray * (ASCII_RAMP.length() - 1)) / 255;
-                ascii_frame += ASCII_RAMP[ramp_index];
+                // Bolt: Ensure safety for lookup
+                ascii_frame += ramp_lookup[gray > 255 ? 255 : gray];
             }
             ascii_frame += '\n';
         }
