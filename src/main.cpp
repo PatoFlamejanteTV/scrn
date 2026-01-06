@@ -396,13 +396,23 @@ int main(int argc, char* argv[]) {
                 // Update status bar to indicate pause without scrolling
                 HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
                 CONSOLE_SCREEN_BUFFER_INFO csbi;
-                GetConsoleScreenBufferInfo(hConsole, &csbi);
-                SHORT width = csbi.dwSize.X;
-                SHORT height = csbi.dwSize.Y;
-                COORD statusPos = {0, (SHORT)(height - 1)};
-                std::string pauseMsg = " [ PAUSED ] Press 'p' to resume...";
-                if (pauseMsg.length() < width) pauseMsg.append(width - pauseMsg.length(), ' ');
-                std::cout << pauseMsg << std::flush;
+                // Sentinel: Check return values to prevent use of uninitialized memory
+                if (hConsole != INVALID_HANDLE_VALUE && GetConsoleScreenBufferInfo(hConsole, &csbi)) {
+                    SHORT width = csbi.dwSize.X;
+                    SHORT height = csbi.dwSize.Y;
+                    COORD statusPos = {0, (SHORT)(height - 1)};
+
+                    // Sentinel: Use SetConsoleCursorPosition to ensure we overwrite the status line correctly
+                    // instead of relying on implicit cursor position which might be wrong
+                    SetConsoleCursorPosition(hConsole, statusPos);
+
+                    std::string pauseMsg = " [ PAUSED ] Press 'p' to resume...";
+                    if (pauseMsg.length() < width) pauseMsg.append(width - pauseMsg.length(), ' ');
+                    std::cout << pauseMsg << std::flush;
+                } else {
+                    // Fallback if we can't get console info
+                    std::cout << " [ PAUSED ] Press 'p' to resume..." << std::flush;
+                }
 
                 while (true) {
                     if (_kbhit()) {
