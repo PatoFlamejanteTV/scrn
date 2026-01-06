@@ -369,9 +369,22 @@ int main(int argc, char* argv[]) {
         std::cout << "\n[Info] This mode uses Unicode characters.\n";
     }
 #endif
-    for (int i = 3; i > 0; --i) {
+#ifdef _WIN32
+    std::cout << "\nPress any key to skip countdown...\n";
+#endif
+    bool skipped = false;
+    for (int i = 3; i > 0 && !skipped; --i) {
         std::cout << "\rStarting in " << i << "... " << std::flush;
-        std::this_thread::sleep_for(std::chrono::seconds(1));
+        for (int j = 0; j < 10; ++j) {
+#ifdef _WIN32
+            if (_kbhit()) {
+                _getch(); // consume the key
+                skipped = true;
+                break;
+            }
+#endif
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
     }
     std::cout << "\rStarting...       " << std::endl;
 
