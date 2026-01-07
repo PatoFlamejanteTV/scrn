@@ -134,12 +134,16 @@ void print_help() {
     // Find longest key for padding
     size_t max_len = 0;
     for (const auto& kv : ASCII_RAMPS) {
-        if (kv.first.length() > max_len) max_len = kv.first.length();
+        size_t len = kv.first.length();
+        if (kv.first == "normal") len += 10; // " (default)"
+        if (len > max_len) max_len = len;
     }
     size_t pad_width = max_len + 4;
 
     for (const auto& kv : ASCII_RAMPS) {
-        std::cout << "  " << std::left << std::setw(pad_width) << kv.first
+        std::string mode_display = kv.first;
+        if (kv.first == "normal") mode_display += " (default)";
+        std::cout << "  " << std::left << std::setw(pad_width) << mode_display
                   << kv.second << std::endl;
     }
 }
@@ -519,7 +523,19 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 #else
-int main() {
+int main(int argc, char* argv[]) {
+    bool show_help = false;
+    std::string error;
+    get_ascii_ramp_from_args(argc, argv, show_help, error);
+
+    if (show_help) {
+        if (!error.empty()) {
+            std::cerr << error << std::endl;
+        }
+        print_help();
+        return error.empty() ? 0 : 1;
+    }
+
     std::cerr << "This application has been configured to use the Windows GDI API and will only run on Windows." << std::endl;
     return 1;
 }
