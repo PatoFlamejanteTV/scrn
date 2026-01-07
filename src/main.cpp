@@ -71,8 +71,26 @@ public:
         if (new_size < buffer_.size()) {
             // Wipe the data we are about to discard
             SecureZeroMemory(buffer_.data() + new_size, buffer_.size() - new_size);
+            buffer_.resize(new_size);
+        } else if (new_size > buffer_.capacity()) {
+            // Growing beyond capacity: manual reallocation to ensure old memory wipe
+            std::vector<unsigned char> new_buffer;
+            new_buffer.reserve(new_size);
+
+            if (!buffer_.empty()) {
+                new_buffer.insert(new_buffer.end(), buffer_.begin(), buffer_.end());
+            }
+            new_buffer.resize(new_size);
+
+            // Wipe old data before swapping/freeing
+            if (!buffer_.empty()) {
+                SecureZeroMemory(buffer_.data(), buffer_.size());
+            }
+            buffer_.swap(new_buffer);
+        } else {
+            // Growing within capacity: safe to just resize
+            buffer_.resize(new_size);
         }
-        buffer_.resize(new_size);
     }
     unsigned char* data() { return buffer_.data(); }
     const unsigned char* data() const { return buffer_.data(); }
