@@ -51,44 +51,7 @@ bool ramp_has_unicode(const std::string& ramp) {
 #include <chrono>
 #include <thread>
 #include <memory>
-
-#ifdef _WIN32
-// Secure wrapper for sensitive memory that wipes data on destruction
-class SecureBuffer {
-    std::vector<unsigned char> buffer_;
-public:
-    SecureBuffer() = default;
-    ~SecureBuffer() {
-        if (!buffer_.empty()) {
-            SecureZeroMemory(buffer_.data(), buffer_.size());
-        }
-    }
-    // Prevent accidental copying which would leave unwiped duplicates
-    SecureBuffer(const SecureBuffer&) = delete;
-    SecureBuffer& operator=(const SecureBuffer&) = delete;
-
-    void resize(size_t new_size) {
-        if (new_size < buffer_.size()) {
-            // Wipe the data we are about to discard
-            SecureZeroMemory(buffer_.data() + new_size, buffer_.size() - new_size);
-        }
-        buffer_.resize(new_size);
-    }
-    unsigned char* data() { return buffer_.data(); }
-    const unsigned char* data() const { return buffer_.data(); }
-    size_t size() const { return buffer_.size(); }
-};
-#else
-// Fallback for non-Windows platforms (no secure wipe)
-class SecureBuffer {
-    std::vector<unsigned char> buffer_;
-public:
-    void resize(size_t new_size) { buffer_.resize(new_size); }
-    unsigned char* data() { return buffer_.data(); }
-    const unsigned char* data() const { return buffer_.data(); }
-    size_t size() const { return buffer_.size(); }
-};
-#endif
+#include "SecureBuffer.h"
 
 // Platform-specific includes for clearing the console
 #ifdef _WIN32
