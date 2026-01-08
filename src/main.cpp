@@ -418,15 +418,17 @@ int main(int argc, char* argv[]) {
                 break;
             } else if (key == 'm' || key == 'M') {
                 // Palette: Cycle to the next mode
-                auto it = ASCII_RAMPS.find(mode);
-                if (it == ASCII_RAMPS.end()) {
-                    it = ASCII_RAMPS.begin();
-                } else {
-                    it++;
-                    if (it == ASCII_RAMPS.end()) it = ASCII_RAMPS.begin();
+                if (!ASCII_RAMPS.empty()) {
+                    auto it = ASCII_RAMPS.find(mode);
+                    if (it == ASCII_RAMPS.end()) {
+                        it = ASCII_RAMPS.begin();
+                    } else {
+                        it++;
+                        if (it == ASCII_RAMPS.end()) it = ASCII_RAMPS.begin();
+                    }
+                    mode = it->first;
+                    ASCII_RAMP = it->second;
                 }
-                mode = it->first;
-                ASCII_RAMP = it->second;
 
                 // Update Code Page if necessary
                 if (mode == "codepage437") {
