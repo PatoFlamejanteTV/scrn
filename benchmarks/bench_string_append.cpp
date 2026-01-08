@@ -110,8 +110,6 @@ int main() {
 
     if (result_current != result_direct) {
         std::cerr << "Mismatch! Output differs.\n";
-        // std::cerr << "Current size: " << result_current.size() << "\n";
-        // std::cerr << "Direct size: " << result_direct.size() << "\n";
         return 1;
     } else {
         std::cout << "Verification: Output matches.\n";

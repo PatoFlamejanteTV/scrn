@@ -464,14 +464,15 @@ int main(int argc, char* argv[]) {
         // Bolt: Optimized ASCII conversion loop
         // Reuse buffer and use lookup table for faster conversion.
         // Direct pointer access avoids std::string::operator+= overhead (~2x faster).
-        size_t required_size = (CONSOLE_WIDTH + 1) * (CONSOLE_HEIGHT - 1);
+        // Size covers pixels + newlines + status bar line
+        size_t required_size = (CONSOLE_WIDTH + 1) * CONSOLE_HEIGHT;
         if (ascii_frame.size() != required_size) {
             ascii_frame.resize(required_size);
         }
 
         char* out_ptr = &ascii_frame[0];
 
-        // Reserve last line for status bar
+        // Process pixel rows (first CONSOLE_HEIGHT - 1 lines)
         for (int y = 0; y < CONSOLE_HEIGHT - 1; ++y) {
             // Precompute row offset
             const size_t row_offset = static_cast<size_t>(y) * CONSOLE_WIDTH * 4;
@@ -495,15 +496,18 @@ int main(int argc, char* argv[]) {
             *out_ptr++ = '\n';
         }
 
-        // Palette: Add status bar at the bottom
+        // Palette: Add status bar at the bottom using direct pointer write for consistency
         std::string status = " [ AsciiScreen ] Mode: " + mode + " | FPS: " + std::to_string(current_fps) + " | [P]ause [Q]uit";
         if (status.length() < CONSOLE_WIDTH) {
             status.append(CONSOLE_WIDTH - status.length(), ' ');
         } else {
             status = status.substr(0, CONSOLE_WIDTH);
         }
-        ascii_frame += status;
-        ascii_frame += '\n';
+
+        for (char c : status) {
+            *out_ptr++ = c;
+        }
+        *out_ptr++ = '\n';
 
         reset_cursor();
         std::cout << ascii_frame << std::flush;
