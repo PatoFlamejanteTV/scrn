@@ -9,3 +9,7 @@
 ## 2025-02-23 - Skippable CLI Delays
 **Learning:** Fixed startup delays (e.g., "Starting in 3...") can frustrate frequent users. Breaking the sleep into small polling intervals (e.g., 100ms) to check for input allows the delay to be skippable, respecting user time and agency.
 **Action:** Replace `sleep(n)` with a loop of `sleep(100ms)` checks for `_kbhit()` when implementing startup countdowns.
+
+## 2025-02-23 - Runtime Logic Updates
+**Learning:** When allowing runtime configuration changes (like switching ASCII ramps), ensure dependent data structures (like lookup tables) are immediately recomputed within the same event loop cycle to avoid visual artifacts or inconsistent state.
+**Action:** Group state update logic (e.g., variable assignment + lookup table regeneration) into a single block triggered by the input event.

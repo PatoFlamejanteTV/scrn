@@ -343,12 +343,12 @@ int main(int argc, char* argv[]) {
             break;
         }
     }
-    const std::string& ASCII_RAMP = ramp_or_mode;
+    std::string ASCII_RAMP = ramp_or_mode;
     const auto frame_duration = std::chrono::milliseconds(1000 / TARGET_FPS);
 
     std::cout << "Starting screen capture using GDI...\n";
 #ifdef _WIN32
-    std::cout << "Controls: [q] Quit  [p] Pause/Resume\n";
+    std::cout << "Controls: [q] Quit  [p] Pause/Resume  [m] Next Mode\n";
 #else
     std::cout << "Press Ctrl+C to exit.\n";
 #endif
@@ -416,6 +416,34 @@ int main(int argc, char* argv[]) {
             int key = _getch();
             if (key == 'q' || key == 'Q') {
                 break;
+            } else if (key == 'm' || key == 'M') {
+                // Palette: Cycle to the next mode
+                auto it = ASCII_RAMPS.find(mode);
+                if (it == ASCII_RAMPS.end()) {
+                    it = ASCII_RAMPS.begin();
+                } else {
+                    it++;
+                    if (it == ASCII_RAMPS.end()) it = ASCII_RAMPS.begin();
+                }
+                mode = it->first;
+                ASCII_RAMP = it->second;
+
+                // Update Code Page if necessary
+                if (mode == "codepage437") {
+                    cp_guard = std::make_unique<ConsoleCodePageGuard>(437);
+                } else if (ramp_has_unicode(ASCII_RAMP)) {
+                    cp_guard = std::make_unique<ConsoleCodePageGuard>(65001);
+                } else {
+                    // Resetting the guard invokes the destructor, which restores the code page
+                    // that was active when the guard was created (stored in old_cp).
+                    cp_guard.reset();
+                }
+
+                // Bolt: Recompute lookup table for the new ramp
+                for (int i = 0; i < 256; ++i) {
+                    gray_lookup[i] = ASCII_RAMP[(i * (ASCII_RAMP.length() - 1)) / 255];
+                }
+
             } else if (key == 'p' || key == 'P') {
                 // Update status bar to indicate pause without scrolling
                 HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
@@ -490,7 +518,7 @@ int main(int argc, char* argv[]) {
         }
 
         // Palette: Add status bar at the bottom
-        std::string status = " [ AsciiScreen ] Mode: " + mode + " | FPS: " + std::to_string(current_fps) + " | [P]ause [Q]uit";
+        std::string status = " [ AsciiScreen ] Mode: " + mode + " | FPS: " + std::to_string(current_fps) + " | [P]ause [Q]uit [M]ode";
         if (status.length() < CONSOLE_WIDTH) {
             status.append(CONSOLE_WIDTH - status.length(), ' ');
         } else {
