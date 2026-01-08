@@ -418,17 +418,15 @@ int main(int argc, char* argv[]) {
                 break;
             } else if (key == 'm' || key == 'M') {
                 // Palette: Cycle to the next mode
-                if (!ASCII_RAMPS.empty()) {
-                    auto it = ASCII_RAMPS.find(mode);
-                    if (it == ASCII_RAMPS.end()) {
-                        it = ASCII_RAMPS.begin();
-                    } else {
-                        it++;
-                        if (it == ASCII_RAMPS.end()) it = ASCII_RAMPS.begin();
-                    }
-                    mode = it->first;
-                    ASCII_RAMP = it->second;
+                auto it = ASCII_RAMPS.find(mode);
+                if (it == ASCII_RAMPS.end()) {
+                    it = ASCII_RAMPS.begin();
+                } else {
+                    it++;
+                    if (it == ASCII_RAMPS.end()) it = ASCII_RAMPS.begin();
                 }
+                mode = it->first;
+                ASCII_RAMP = it->second;
 
                 // Update Code Page if necessary
                 if (mode == "codepage437") {
@@ -436,7 +434,9 @@ int main(int argc, char* argv[]) {
                 } else if (ramp_has_unicode(ASCII_RAMP)) {
                     cp_guard = std::make_unique<ConsoleCodePageGuard>(65001);
                 } else {
-                    cp_guard.reset(); // Revert to previous (likely 65001)
+                    // Resetting the guard invokes the destructor, which restores the code page
+                    // that was active when the guard was created (stored in old_cp).
+                    cp_guard.reset();
                 }
 
                 // Bolt: Recompute lookup table for the new ramp
