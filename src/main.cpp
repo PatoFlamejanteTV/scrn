@@ -51,6 +51,7 @@ bool ramp_has_unicode(const std::string& ramp) {
 #include <chrono>
 #include <thread>
 #include <memory>
+#include <cstring>
 
 #ifdef _WIN32
 // Secure wrapper for sensitive memory that wipes data on destruction
@@ -462,8 +463,14 @@ int main(int argc, char* argv[]) {
         const auto* src_data = frame_buffer.data();
 
         // Bolt: Optimized ASCII conversion loop
-        // Reuse buffer and use lookup table for faster conversion
-        ascii_frame.clear();
+        // Reuse buffer and use lookup table for faster conversion.
+        // Direct buffer access avoids std::string::operator+= overhead.
+        const size_t target_size = (CONSOLE_WIDTH + 1) * CONSOLE_HEIGHT;
+        if (ascii_frame.size() != target_size) {
+            ascii_frame.resize(target_size);
+        }
+
+        char* ptr = &ascii_frame[0];
 
         // Reserve last line for status bar
         for (int y = 0; y < CONSOLE_HEIGHT - 1; ++y) {
@@ -484,9 +491,9 @@ int main(int argc, char* argv[]) {
                                            static_cast<unsigned int>(g) * 46871 +
                                            static_cast<unsigned int>(b) * 4732) >> 16;
 
-                ascii_frame += gray_lookup[gray];
+                *ptr++ = gray_lookup[gray];
             }
-            ascii_frame += '\n';
+            *ptr++ = '\n';
         }
 
         // Palette: Add status bar at the bottom
@@ -496,11 +503,15 @@ int main(int argc, char* argv[]) {
         } else {
             status = status.substr(0, CONSOLE_WIDTH);
         }
-        ascii_frame += status;
-        ascii_frame += '\n';
+
+        std::memcpy(ptr, status.data(), CONSOLE_WIDTH);
+        ptr += CONSOLE_WIDTH;
+        *ptr++ = '\n';
 
         reset_cursor();
-        std::cout << ascii_frame << std::flush;
+        // Use write to ensure we print exactly what we prepared (though size matches)
+        std::cout.write(ascii_frame.data(), ascii_frame.size());
+        std::cout.flush();
 
         frame_count++;
         auto end_time = std::chrono::high_resolution_clock::now();
