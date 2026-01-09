@@ -51,13 +51,41 @@ bool ramp_has_unicode(const std::string& ramp) {
 #include <chrono>
 #include <thread>
 #include <memory>
+#include <new>
+#include <cstdlib>
 
 #ifdef _WIN32
+// Sentinel: Custom allocator to ensure memory is wiped on deallocation (e.g., during vector growth)
+template <typename T>
+struct SecureAllocator {
+    using value_type = T;
+    SecureAllocator() = default;
+    template <class U> constexpr SecureAllocator(const SecureAllocator<U>&) noexcept {}
+    T* allocate(std::size_t n) {
+        if (n > std::size_t(-1) / sizeof(T)) throw std::bad_alloc();
+        if (auto p = static_cast<T*>(std::malloc(n * sizeof(T)))) return p;
+        throw std::bad_alloc();
+    }
+    void deallocate(T* p, std::size_t n) noexcept {
+        if (p) {
+            // Sentinel: Wipe memory before returning it to the system
+            SecureZeroMemory(p, n * sizeof(T));
+            std::free(p);
+        }
+    }
+};
+template <class T, class U>
+bool operator==(const SecureAllocator<T>&, const SecureAllocator<U>&) { return true; }
+template <class T, class U>
+bool operator!=(const SecureAllocator<T>&, const SecureAllocator<U>&) { return false; }
+
 // Secure wrapper for sensitive memory that wipes data on destruction
 class SecureBuffer {
-    std::vector<unsigned char> buffer_;
+    std::vector<unsigned char, SecureAllocator<unsigned char>> buffer_;
 public:
     SecureBuffer() = default;
+    // Destructor uses allocator's deallocate, which wipes memory.
+    // Explicit wipe here is redundant but safe.
     ~SecureBuffer() {
         if (!buffer_.empty()) {
             SecureZeroMemory(buffer_.data(), buffer_.size());
@@ -69,7 +97,7 @@ public:
 
     void resize(size_t new_size) {
         if (new_size < buffer_.size()) {
-            // Wipe the data we are about to discard
+            // Sentinel: Wipe the data we are about to discard (shrinking doesn't always deallocate)
             SecureZeroMemory(buffer_.data() + new_size, buffer_.size() - new_size);
         }
         buffer_.resize(new_size);
