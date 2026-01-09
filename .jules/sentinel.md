@@ -20,3 +20,13 @@ Standard C++ containers do not zero-out memory upon destruction.
 
 **Prevention:**
 Use a RAII wrapper (e.g., `SecureBuffer`) that explicitly calls platform-specific memory wiping functions (like `SecureZeroMemory` on Windows or `explicit_bzero` on Linux) in its destructor.
+
+## 2024-05-25 - [Data Remanence on Reallocation]
+**Vulnerability:**
+The `SecureBuffer` wrapper correctly wiped memory on destruction, but failed to wipe old memory blocks when `std::vector` reallocated its internal storage (e.g., during `resize` growth). The standard allocator frees the old block without clearing it, leaving sensitive data on the heap.
+
+**Learning:**
+Wrappers around standard containers are insufficient for secure memory management if the container manages its own memory allocation. A custom allocator is required to intercept deallocation events and sanitize memory before it is returned to the system.
+
+**Prevention:**
+Implement a custom `SecureAllocator` that calls `SecureZeroMemory` (or equivalent) in its `deallocate` method, and use it with standard containers (`std::vector<T, SecureAllocator<T>>`) to ensure all freed memory is wiped.
