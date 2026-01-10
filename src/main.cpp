@@ -16,6 +16,28 @@ public:
     }
 };
 
+// Helper to hide/restore console cursor (RAII)
+class ConsoleCursorGuard {
+    HANDLE hConsole;
+    CONSOLE_CURSOR_INFO old_info;
+    bool m_valid;
+public:
+    ConsoleCursorGuard() : m_valid(false) {
+        hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+        if (GetConsoleCursorInfo(hConsole, &old_info)) {
+            m_valid = true;
+            CONSOLE_CURSOR_INFO new_info = old_info;
+            new_info.bVisible = FALSE; // Hide cursor
+            SetConsoleCursorInfo(hConsole, &new_info);
+        }
+    }
+    ~ConsoleCursorGuard() {
+        if (m_valid) {
+            SetConsoleCursorInfo(hConsole, &old_info); // Restore cursor
+        }
+    }
+};
+
 // RAII wrapper for GDI Device Context handle
 class ScopedHDC {
     HDC hdc_;
@@ -309,6 +331,8 @@ bool captureScreenGDI(SecureBuffer& buffer, int& width, int& height) {
 int main(int argc, char* argv[]) {
 #ifdef _WIN32
     std::unique_ptr<ConsoleCodePageGuard> cp_guard;
+    // Automatically hide cursor during execution and restore on exit
+    ConsoleCursorGuard cursor_guard;
 #endif
 #ifdef _WIN32
     // Set Windows console to UTF-8 for Unicode output
@@ -516,6 +540,15 @@ int main(int argc, char* argv[]) {
             std::this_thread::sleep_for(frame_duration - elapsed);
         }
     }
+
+#ifdef _WIN32
+    // Palette: Clean exit - move cursor to bottom to prevent prompt overwriting the last frame
+    HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+    COORD endPos = {0, (SHORT)CONSOLE_HEIGHT};
+    SetConsoleCursorPosition(hOut, endPos);
+    std::cout << "Exiting AsciiScreen..." << std::endl;
+#endif
+
     return 0;
 }
 #else
