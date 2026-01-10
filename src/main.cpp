@@ -107,6 +107,7 @@ const int CONSOLE_HEIGHT = 80;  // Doubled for higher resolution
 
 #include <map>
 #include <iomanip>
+#include <cstring>
 
 // Map of modes to their ASCII ramps
 const std::map<std::string, std::string> ASCII_RAMPS = {
@@ -462,8 +463,13 @@ int main(int argc, char* argv[]) {
         const auto* src_data = frame_buffer.data();
 
         // Bolt: Optimized ASCII conversion loop
-        // Reuse buffer and use lookup table for faster conversion
-        ascii_frame.clear();
+        // Resize buffer once and write directly to memory to avoid overhead of std::string::operator+=
+        const size_t total_size = (CONSOLE_WIDTH + 1) * CONSOLE_HEIGHT;
+        if (ascii_frame.size() != total_size) {
+            ascii_frame.resize(total_size);
+        }
+
+        char* out_ptr = &ascii_frame[0];
 
         // Reserve last line for status bar
         for (int y = 0; y < CONSOLE_HEIGHT - 1; ++y) {
@@ -484,9 +490,9 @@ int main(int argc, char* argv[]) {
                                            static_cast<unsigned int>(g) * 46871 +
                                            static_cast<unsigned int>(b) * 4732) >> 16;
 
-                ascii_frame += gray_lookup[gray];
+                *out_ptr++ = gray_lookup[gray];
             }
-            ascii_frame += '\n';
+            *out_ptr++ = '\n';
         }
 
         // Palette: Add status bar at the bottom
@@ -496,8 +502,9 @@ int main(int argc, char* argv[]) {
         } else {
             status = status.substr(0, CONSOLE_WIDTH);
         }
-        ascii_frame += status;
-        ascii_frame += '\n';
+        std::memcpy(out_ptr, status.data(), CONSOLE_WIDTH);
+        out_ptr += CONSOLE_WIDTH;
+        *out_ptr++ = '\n';
 
         reset_cursor();
         std::cout << ascii_frame << std::flush;
