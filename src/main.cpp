@@ -16,6 +16,33 @@ public:
     }
 };
 
+// Helper to hide cursor during execution (RAII)
+class ConsoleCursorGuard {
+    HANDLE hConsole;
+    CONSOLE_CURSOR_INFO old_info;
+    bool bInitialized;
+public:
+    ConsoleCursorGuard() : hConsole(INVALID_HANDLE_VALUE), bInitialized(false) {
+        hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+        if (hConsole != INVALID_HANDLE_VALUE) {
+            if (GetConsoleCursorInfo(hConsole, &old_info)) {
+                bInitialized = true;
+                CONSOLE_CURSOR_INFO new_info = old_info;
+                new_info.bVisible = FALSE;
+                SetConsoleCursorInfo(hConsole, &new_info);
+            }
+        }
+    }
+    ~ConsoleCursorGuard() {
+        if (bInitialized && hConsole != INVALID_HANDLE_VALUE) {
+            SetConsoleCursorInfo(hConsole, &old_info);
+        }
+    }
+    // No copy
+    ConsoleCursorGuard(const ConsoleCursorGuard&) = delete;
+    ConsoleCursorGuard& operator=(const ConsoleCursorGuard&) = delete;
+};
+
 // RAII wrapper for GDI Device Context handle
 class ScopedHDC {
     HDC hdc_;
@@ -309,6 +336,8 @@ bool captureScreenGDI(SecureBuffer& buffer, int& width, int& height) {
 int main(int argc, char* argv[]) {
 #ifdef _WIN32
     std::unique_ptr<ConsoleCodePageGuard> cp_guard;
+    // Hide cursor to prevent flickering
+    ConsoleCursorGuard cursor_guard;
 #endif
 #ifdef _WIN32
     // Set Windows console to UTF-8 for Unicode output
