@@ -463,12 +463,26 @@ int main(int argc, char* argv[]) {
 
         // Bolt: Optimized ASCII conversion loop
         // Reuse buffer and use lookup table for faster conversion
-        ascii_frame.clear();
+
+        // Resize buffer once to avoid repeated size checks in operator+=
+        // We render (CONSOLE_HEIGHT - 1) lines of CONSOLE_WIDTH pixels plus a newline for each
+        const size_t grid_width = CONSOLE_WIDTH + 1;
+        const size_t grid_height = CONSOLE_HEIGHT - 1;
+        const size_t grid_size = grid_width * grid_height;
+
+        if (ascii_frame.size() != grid_size) {
+            ascii_frame.resize(grid_size);
+        }
+
+        // Get pointer to the buffer for direct access
+        // &ascii_frame[0] is safe in C++11+
+        char* frame_ptr = &ascii_frame[0];
 
         // Reserve last line for status bar
         for (int y = 0; y < CONSOLE_HEIGHT - 1; ++y) {
             // Precompute row offset
             const size_t row_offset = static_cast<size_t>(y) * CONSOLE_WIDTH * 4;
+            const size_t dst_row_offset = static_cast<size_t>(y) * grid_width;
 
             for (int x = 0; x < CONSOLE_WIDTH; ++x) {
                 const size_t pixel_offset = row_offset + (x * 4);
@@ -484,9 +498,9 @@ int main(int argc, char* argv[]) {
                                            static_cast<unsigned int>(g) * 46871 +
                                            static_cast<unsigned int>(b) * 4732) >> 16;
 
-                ascii_frame += gray_lookup[gray];
+                frame_ptr[dst_row_offset + x] = gray_lookup[gray];
             }
-            ascii_frame += '\n';
+            frame_ptr[dst_row_offset + CONSOLE_WIDTH] = '\n';
         }
 
         // Palette: Add status bar at the bottom
