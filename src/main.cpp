@@ -51,6 +51,7 @@ bool ramp_has_unicode(const std::string& ramp) {
 #include <chrono>
 #include <thread>
 #include <memory>
+#include <cstring>
 
 #ifdef _WIN32
 // Secure wrapper for sensitive memory that wipes data on destruction
@@ -397,8 +398,10 @@ int main(int argc, char* argv[]) {
     auto last_fps_time = std::chrono::high_resolution_clock::now();
 
     // Bolt: Reuse buffer to avoid reallocation overhead (~1.2x speedup)
-    std::string ascii_frame;
-    ascii_frame.reserve((CONSOLE_WIDTH + 1) * CONSOLE_HEIGHT);
+    // Sentinel: Use SecureBuffer to ensure sensitive screen data is wiped from memory
+    SecureBuffer ascii_frame;
+    const size_t ascii_frame_size = (static_cast<size_t>(CONSOLE_WIDTH) + 1) * CONSOLE_HEIGHT;
+    ascii_frame.resize(ascii_frame_size);
 
     // Bolt: Precompute lookup table for grayscale to ASCII conversion
     // This avoids per-pixel division and multiplication.
@@ -463,12 +466,14 @@ int main(int argc, char* argv[]) {
 
         // Bolt: Optimized ASCII conversion loop
         // Reuse buffer and use lookup table for faster conversion
-        ascii_frame.clear();
+        unsigned char* ascii_ptr = ascii_frame.data();
 
         // Reserve last line for status bar
         for (int y = 0; y < CONSOLE_HEIGHT - 1; ++y) {
             // Precompute row offset
             const size_t row_offset = static_cast<size_t>(y) * CONSOLE_WIDTH * 4;
+            // Precompute ascii offset (width + newline)
+            const size_t ascii_row_start = static_cast<size_t>(y) * (CONSOLE_WIDTH + 1);
 
             for (int x = 0; x < CONSOLE_WIDTH; ++x) {
                 const size_t pixel_offset = row_offset + (x * 4);
@@ -484,9 +489,9 @@ int main(int argc, char* argv[]) {
                                            static_cast<unsigned int>(g) * 46871 +
                                            static_cast<unsigned int>(b) * 4732) >> 16;
 
-                ascii_frame += gray_lookup[gray];
+                ascii_ptr[ascii_row_start + x] = static_cast<unsigned char>(gray_lookup[gray]);
             }
-            ascii_frame += '\n';
+            ascii_ptr[ascii_row_start + CONSOLE_WIDTH] = '\n';
         }
 
         // Palette: Add status bar at the bottom
@@ -496,11 +501,15 @@ int main(int argc, char* argv[]) {
         } else {
             status = status.substr(0, CONSOLE_WIDTH);
         }
-        ascii_frame += status;
-        ascii_frame += '\n';
+
+        // Write status to the last line of the buffer
+        const size_t status_offset = static_cast<size_t>(CONSOLE_HEIGHT - 1) * (CONSOLE_WIDTH + 1);
+        std::memcpy(ascii_ptr + status_offset, status.c_str(), status.length());
+        ascii_ptr[status_offset + CONSOLE_WIDTH] = '\n';
 
         reset_cursor();
-        std::cout << ascii_frame << std::flush;
+        std::cout.write(reinterpret_cast<const char*>(ascii_frame.data()), ascii_frame.size());
+        std::cout << std::flush;
 
         frame_count++;
         auto end_time = std::chrono::high_resolution_clock::now();
